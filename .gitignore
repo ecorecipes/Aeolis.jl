@@ -1,0 +1,28 @@
+.DS_Store
+/Manifest.toml
+/Manifest-v*.toml
+docs/build/
+docs/Manifest.toml
+docs/Manifest-v*.toml
+vignettes/Manifest.toml
+vignettes/Manifest-v*.toml
+vignettes/_freeze/
+vignettes/.quarto/
+vignettes/**/*.quarto_ipynb
+
+# Coverage and allocation output
+*.cov
+*.mem
+*.jl.*.cov
+
+# LaTeX intermediates; rendered vignettes (html, md, pdf, _files) are committed
+*.tex
+*.aux
+*.log
+*.out
+*.toc
+
+# model output written by examples and tests
+*.nc
+!test/data/*/reference.nc
+*.jls
