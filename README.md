@@ -58,8 +58,27 @@ sol = run_config("aeolis.txt")   # an AeoLiS configuration file
 
 ## Vignettes
 
-The vignettes in [`vignettes/`](vignettes/) run from simple to advanced; see
-[vignettes/README.md](vignettes/README.md) for the list and how they are rendered.
+The vignettes run from simple to advanced:
+
+| Vignette | Topic |
+|---|---|
+| [01 Getting started](vignettes/01_getting_started/01_getting_started.md) | parameters, problems, solutions and plots on a dry transect; fetch and erosion |
+| [02 AeoLiS configuration files](vignettes/02_configuration_files/02_configuration_files.md) | reading and writing `aeolis.txt`, `run_config`, netCDF output, agreement with aeolis-python |
+| [03 Transport formulations](vignettes/03_transport_formulations/03_transport_formulations.md) | thresholds, six saturated-flux formulations, grain velocities |
+| [04 Fetch and supply limitation](vignettes/04_fetch_and_supply/04_fetch_and_supply.md) | the fetch ODE with OrdinaryDiffEq, numerical diffusion, a non-erodible layer |
+| [05 Tides, waves and moisture](vignettes/05_tides_waves_moisture/05_tides_waves_moisture.md) | water levels, runup, infiltration and the moisture threshold |
+| [06 Sediment sorting and armouring](vignettes/06_sediment_sorting/06_sediment_sorting.md) | several fractions in bed layers, coarsening and the fall of supply |
+| [07 Vegetation and foredunes](vignettes/07_vegetation/07_vegetation.md) | Raupach and Okin shear reduction, trapping, growth and burial |
+| [08 Sand fences](vignettes/08_sand_fences/08_sand_fences.md) | sheltering, deposition and burial of a fence |
+| [09 Dunes in two dimensions](vignettes/09_dunes_in_two_dimensions/09_dunes_in_two_dimensions.md) | spectral shear, the separation bubble, a migrating hill |
+| [10 Numerical schemes and solvers](vignettes/10_schemes_and_solvers/10_schemes_and_solvers.md) | implicit, Crank-Nicolson and explicit schemes; trunk, pieter and steady-state solvers; LinearSolve algorithms |
+| [11 Callbacks and ensembles](vignettes/11_callbacks_and_ensembles/11_callbacks_and_ensembles.md) | a nourishment and a storm with SciMLBase callbacks, tstops, an ensemble sweep |
+| [12 Calibration](vignettes/12_calibration/12_calibration.md) | fitting transport parameters to flux observations with Optimization.jl |
+
+Each vignette is also published as a tutorial in the
+[documentation](https://ecorecipes.github.io/Aeolis.jl/), and is rendered to HTML, Markdown and PDF in its directory
+under [`vignettes/`](vignettes/). The sources are the `.qmd` files there; [vignettes/README.md](vignettes/README.md)
+explains how they are rendered.
 
 ## Citation
 
