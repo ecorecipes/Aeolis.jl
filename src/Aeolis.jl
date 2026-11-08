@@ -19,6 +19,7 @@ using CommonSolve: CommonSolve, init, solve, solve!, step!
 using SciMLBase: SciMLBase, CallbackSet, DiscreteCallback, EnsembleProblem, ReturnCode,
                  remake, reinit!, terminate!, u_modified!, add_tstop!
 using DataInterpolations: DataInterpolations
+using Dates: Dates
 using DelimitedFiles: DelimitedFiles
 using FFTW: FFTW
 using LinearAlgebra: LinearAlgebra
@@ -29,6 +30,7 @@ using Serialization: Serialization
 using SparseArrays: SparseArrays
 using SpecialFunctions: SpecialFunctions
 using Statistics: mean
+using TOML: TOML
 
 include("errors.jl")
 include("parameters.jl")
@@ -44,6 +46,8 @@ include("transport.jl")
 include("hydro.jl")
 include("avalanching.jl")
 include("vegetation.jl")
+include("marram.jl")
+include("marram_experiments.jl")
 include("fences.jl")
 include("erosion.jl")
 include("solvers.jl")
@@ -55,6 +59,8 @@ include("recipes.jl")
 export AeolisError, ConfigurationError, UnknownOptionError, UnsupportedOptionError
 export AeolisParameters, parameter_info, remake_parameters
 export AeolisState, state_info
+export MarramTraits, marram_traits, marram_info, MarramCell, marram_rates, marram_step,
+       simulate_marram, marram_experiment
 export AeolisProblem, AeolisIntegrator, AeolisSolution, transect, statistic
 export AbstractAeolisAlgorithm, EulerBackward, CrankNicolson, EulerForward,
        default_algorithm

@@ -24,6 +24,9 @@ and reproduces its results to round-off on the AeoLiS regression cases and on ca
   and hysteresis, and salt.
 - Avalanching, vegetation (Raupach and Okin shear reduction, growth, burial, germination), sand fences, and dune
   erosion by waves (Palmsten and Holman 2012).
+- Beyond AeoLiS, a model of marram grass in one cell, calibrated to published experiments: shoot density, canopy
+  height, roots, rooted depth, root-zone water and soil-biota pressure, with the source and evidence grade of every
+  trait (`MarramTraits`, `simulate_marram`, `marram_experiment`). Coupling it to the grid is in progress.
 - Transport solvers: the implicit `Trunk` and finite-volume `Pieter` solvers with Euler backward, Crank-Nicolson
   or Euler forward schemes, and a `SteadyState` sweep; sparse systems solved with LinearSolve.jl.
 - `AeolisProblem`, `init`, `step!`, `solve`, `remake`, SciMLBase callbacks and ensembles; AeoLiS configuration
@@ -74,6 +77,7 @@ The vignettes run from simple to advanced:
 | [10 Numerical schemes and solvers](vignettes/10_schemes_and_solvers/10_schemes_and_solvers.md) | implicit, Crank-Nicolson and explicit schemes; trunk, pieter and steady-state solvers; LinearSolve algorithms |
 | [11 Callbacks and ensembles](vignettes/11_callbacks_and_ensembles/11_callbacks_and_ensembles.md) | a nourishment and a storm with SciMLBase callbacks, tstops, an ensemble sweep |
 | [12 Calibration](vignettes/12_calibration/12_calibration.md) | fitting transport parameters to flux observations with Optimization.jl |
+| [13 Marram grass](vignettes/13_marram_grass/13_marram_grass.md) | a model of marram grass in one cell, and the published experiments it is calibrated to |
 
 Each vignette is also published as a tutorial in the
 [documentation](https://ecorecipes.github.io/Aeolis.jl/), and is rendered to HTML, Markdown and PDF in its directory

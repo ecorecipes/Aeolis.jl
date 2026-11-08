@@ -501,7 +501,21 @@ const PARAMETER_TABLE = Tuple{Symbol,Type,Any,String,String}[
                                                              (:t_veg, Float64, 3.0, "day",
                                                               "Time scale of vegetation growth (duranmoore14)"),
                                                              (:v_gam, Float64, 1.0, "-",
-                                                              "Burial response (duranmoore14)")]
+                                                              "Burial response (duranmoore14)"),
+                                                             # marram grass (Aeolis.jl only)
+                                                             (:veg_model, Symbol, :legacy,
+                                                              "-",
+                                                              "Vegetation model: legacy (AeoLiS) or marram"),
+                                                             (:veg_traits_file,
+                                                              Union{Nothing,String},
+                                                              nothing, "-",
+                                                              "TOML file of marram grass traits (defaults when None)"),
+                                                             (:veg_water_file, InputArray,
+                                                              nothing, "-",
+                                                              "Root-zone water forcing: time [s], rainfall [mm/day], potential evapotranspiration [mm/day]"),
+                                                             (:veg_interval, Float64,
+                                                              86400.0, "s",
+                                                              "Interval of the marram grass update in accelerated time")]
 
 const PARAMETER_NAMES = Tuple(first.(PARAMETER_TABLE))
 const PARAMETER_INDEX = Dict(row[1] => row for row in PARAMETER_TABLE)

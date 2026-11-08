@@ -31,7 +31,8 @@ end
 pages = Any["Home" => "index.md",
             "API Reference" => ["Problems and solutions" => "api.md",
                                 "Parameters and state" => "api_parameters.md",
-                                "Processes" => "api_processes.md"],
+                                "Processes" => "api_processes.md",
+                                "Marram grass" => "api_marram.md"],
             "References" => "references.md"]
 tutorials = tutorial_pages()
 isempty(tutorials) || push!(pages, "Tutorials" => tutorials)
@@ -57,7 +58,9 @@ makedocs(;
                                 prettyurls=get(ENV, "CI", "false") == "true",
                                 canonical="https://ecorecipes.github.io/Aeolis.jl",
                                 repolink="https://github.com/ecorecipes/Aeolis.jl",
-                                edit_link="main"),
+                                edit_link="main",
+                                # the table of marram traits is about 17 kB
+                                example_size_threshold=32768),
          pages=pages,
          plugins=[bib])
 

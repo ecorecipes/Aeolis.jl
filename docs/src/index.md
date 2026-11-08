@@ -36,6 +36,7 @@ sources, are in [`vignettes/`](https://github.com/ecorecipes/Aeolis.jl/tree/main
 | [10 Numerical schemes and solvers](tutorials/10_schemes_and_solvers.md) | implicit, Crank-Nicolson and explicit schemes; trunk, pieter and steady-state solvers; LinearSolve algorithms |
 | [11 Callbacks and ensembles](tutorials/11_callbacks_and_ensembles.md) | a nourishment and a storm with SciMLBase callbacks, tstops, an ensemble sweep |
 | [12 Calibration](tutorials/12_calibration.md) | fitting transport parameters to flux observations with Optimization.jl |
+| [13 Marram grass](tutorials/13_marram_grass.md) | a model of marram grass in one cell, and the published experiments it is calibrated to |
 
 ## Processes and formulations
 
@@ -48,6 +49,7 @@ sources, are in [`vignettes/`](https://github.com/ecorecipes/Aeolis.jl/tree/main
 | Dune erosion | [Palmsten2012](@cite) |
 | Shear reduction by vegetation and roughness | [Raupach1992](@cite), [Raupach1993](@cite), [Okin2008](@cite) |
 | Vegetation growth | AeoLiS, or [Duran2013](@cite) |
+| Marram grass in one cell ([Marram grass](api_marram.md)) | [Nolet2018](@cite), [Reijers2021](@cite), [Homberger2026](@cite), [vanderPutten1993](@cite) and others |
 
 ## Array layout
 

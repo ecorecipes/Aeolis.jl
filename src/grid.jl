@@ -101,6 +101,10 @@ function _check_inputs(p::AeolisParameters)
                    :vanrijn_strypsteen))
     _check_option(:method_shear, p.method_shear, (:fft, :quasi2d, :duna2d))
     _check_option(:vegshear_type, p.vegshear_type, (:raupach, :okin))
+    _check_option(:veg_model, p.veg_model, (:legacy, :marram))
+    p.process_vegetation && p.veg_model == :marram &&
+        throw(UnsupportedOptionError(:veg_model, :marram,
+                                     "the marram grass grid model is not implemented yet; the single-cell model is (simulate_marram)"))
     _check_option(:boundary_offshore, p.boundary_offshore,
                   (:flux, :noflux, :constant, :uniform, :gradient, :circular, :re_circular))
     _check_option(:boundary_onshore, p.boundary_onshore,

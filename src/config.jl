@@ -7,7 +7,9 @@ const SPATIAL_FILES = (:xgrid_file, :ygrid_file, :bed_file, :ne_file, :veg_file,
                        :fence_file,
                        :threshold_file, :supply_file, :bedcomp_file, :wave_mask, :tide_mask,
                        :runup_mask, :threshold_mask, :gw_mask, :vver_mask)
-const SERIES_FILES = (:wind_file, :tide_file, :wave_file, :meteo_file)
+const SERIES_FILES = (:wind_file, :tide_file, :wave_file, :meteo_file, :veg_water_file)
+# Files that are kept as paths rather than loaded as arrays.
+const PATH_FILES = (:veg_traits_file,)
 
 """
     load_array(file; spatial=false)
@@ -54,6 +56,7 @@ function parse_value(val::AbstractString; dir::AbstractString=".", key=nothing)
     v = _parse_scalar(String(val))
     if v isa String
         path = isabspath(v) ? v : joinpath(dir, v)
+        key in PATH_FILES && return isfile(path) ? normpath(path) : v
         if isfile(path)
             return load_array(path; spatial=key in SPATIAL_FILES)
         end

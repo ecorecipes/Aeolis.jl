@@ -7,6 +7,7 @@ using NCDatasets
     include("test_parameters.jl")
     include("test_utils.jl")
     include("test_processes.jl")
+    include("test_marram.jl")
     include("test_problem.jl")
     include("test_reference.jl")
     include("test_netcdf.jl")
