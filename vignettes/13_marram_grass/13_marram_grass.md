@@ -31,8 +31,8 @@ its docstring. This vignette:
 - re-runs the published experiments to which the traits were calibrated;
 - follows a stand for ten years as sand supply changes.
 
-The grid model, which couples the cell to wind shear and dune erosion,
-comes later.
+The [next vignette](../14_marram_foredune/14_marram_foredune.md) puts
+the model on a grid.
 
 ``` julia
 ENV["GKSwstype"] = "100"

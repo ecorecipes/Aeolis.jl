@@ -68,7 +68,10 @@ function aeolis_step!(s::AeolisState, m::AeolisModel, t::Real, dt::Real, scheme:
     grid_rotate!(s, m, m.alpha)
     sum(s.uw) != 0 && compute_shear!(s, m)
     p.process_fences && update_fences!(s, m)
-    p.process_vegetation && vegetation_shear!(s, m)
+    if p.process_vegetation
+        p.veg_model == :marram && marram_cover!(s, m)
+        vegetation_shear!(s, m)
+    end
     m.dt_prev = m.dt_opt
     ok, step = set_timestep!(m, s, dt, scheme)
     if !ok
@@ -92,8 +95,12 @@ function aeolis_step!(s::AeolisState, m::AeolisModel, t::Real, dt::Real, scheme:
         avalanche!(s, m)
     end
     if p.process_vegetation
-        germinate!(s, m)
-        grow_vegetation!(s, m)
+        if p.veg_model == :marram
+            marram_update!(s, m, t)
+        else
+            germinate!(s, m)
+            grow_vegetation!(s, m)
+        end
     end
     _count!(m, :time)
     grid_rotate!(s, m, -m.alpha)

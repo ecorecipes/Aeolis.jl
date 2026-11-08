@@ -48,9 +48,8 @@ end
             wind_file=[0.0 5.0 270.0; 3600.0 5.0 270.0])
     @test_throws UnknownOptionError Aeolis.setup_model(AeolisParameters(; base...,
                                                                         veg_model=:dubeveg))
-    @test_throws UnsupportedOptionError Aeolis.setup_model(AeolisParameters(; base...,
-                                                                            process_vegetation=true,
-                                                                            veg_model=:marram))
+    @test_throws ConfigurationError Aeolis.setup_model(AeolisParameters(; base...,
+                                                                        veg_interval=0.0))
     q = AeolisParameters(; refdate="2016-06-24 12:00")
     @test Aeolis.model_datetime(q, 86400.0) == DateTime(2016, 6, 25, 12)
     @test Aeolis.model_datetime(AeolisParameters(; refdate="2020-03-01"), 0) ==
@@ -189,4 +188,52 @@ end
     @test e.growth_ratio > 0.95 && e.survival == 1
     e = marram_experiment(:homberger2024)
     @test e.shoots[1] < 0.5 && all(e.shoots[2:end] .> 1)
+end
+
+@testset "marram grid model" begin
+    day = 86400.0
+    x = collect(0.0:0.5:30.0)
+    calm = [0.0 2.0 270.0; 4000day 2.0 270.0]       # below the transport threshold
+    base = (; xgrid_file=x, bed_file=fill(3.0, length(x)), wind_file=calm, dt=day,
+            process_vegetation=true, veg_model=:marram, veg_file=Float64.(x .<= 10),
+            refdate="2020-01-01 00:00")
+    tr = MarramTraits()
+    m, s = Aeolis.setup_model(AeolisParameters(; base..., tstop=10day))
+    @test m.veg.traits == tr
+    @test s.veg_N[1, 2] == tr.N_max && s.veg_N[end, 2] == 0
+    @test s.hveg[1, 2] == tr.h_new && s.veg_s[1, 2] == tr.s_fc
+    @test all(>(0), s.veg_E) && all(s.veg_E[:, 1] .== s.veg_E[:, 2] .== s.veg_E[:, 3])
+    @test 0 < s.rhoveg[1, 2] <= 1 && s.rhoveg[end, 2] == 0
+    # the patch spreads at about 0.4 m per year (Keijsers et al. 2015)
+    p = AeolisParameters(; base..., tstop=8 * 365day, output_times=365day,
+                         output_vars=[:veg_N], veg_random=false)
+    sol = solve(AeolisProblem(p))
+    N = transect(sol, :veg_N)
+    front = [maximum(x[N[:, k] .> 0]) for k in axes(N, 2)]
+    @test 0.3 <= (front[end] - front[3]) / 6 <= 0.5
+    integ = init(AeolisProblem(AeolisParameters(; base..., tstop=200day)))
+    solve!(integ)
+    u = integ.u
+    for v in (:veg_N, :hveg, :veg_Br, :veg_P, :rhoveg)
+        a = getfield(u, v)
+        @test a[:, 1] == a[:, 2] == a[:, 3]
+    end
+    @test all(isfinite, u.veg_N) && all(0 .<= u.veg_P .<= 1)
+    # seawater kills plants that stay under water, and only those
+    tide = [0.0 2.5; 4000day 2.5]
+    zb = collect(range(2.0, 3.0; length=length(x)))
+    q = AeolisParameters(; base..., bed_file=zb, veg_file=ones(length(x)),
+                         process_tide=true,
+                         tide_file=tide, tstop=40day)
+    integ = init(AeolisProblem(q))
+    solve!(integ)
+    @test all(==(0), integ.u.veg_N[zb .< 2.45, 2])
+    @test all(>(0), integ.u.veg_N[zb .> 2.55, 2])
+    # without rain, a closed canopy dries its root zone and stops growing
+    w = AeolisParameters(; base..., veg_file=ones(length(x)), tstop=60day,
+                         refdate="2020-06-01 00:00",
+                         veg_water_file=[0.0 0.0 5.0; 4000day 0.0 5.0])
+    integ = init(AeolisProblem(w))
+    solve!(integ)
+    @test integ.u.veg_fW[1, 2] == 0 && integ.u.veg_s[1, 2] < tr.s_w
 end

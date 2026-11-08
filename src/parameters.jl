@@ -515,7 +515,9 @@ const PARAMETER_TABLE = Tuple{Symbol,Type,Any,String,String}[
                                                               "Root-zone water forcing: time [s], rainfall [mm/day], potential evapotranspiration [mm/day]"),
                                                              (:veg_interval, Float64,
                                                               86400.0, "s",
-                                                              "Interval of the marram grass update in accelerated time")]
+                                                              "Interval of the marram grass update in accelerated time"),
+                                                             (:veg_random, Bool, true, "-",
+                                                              "Random colonisation of bare cells by marram grass (F: at the expected time)")]
 
 const PARAMETER_NAMES = Tuple(first.(PARAMETER_TABLE))
 const PARAMETER_INDEX = Dict(row[1] => row for row in PARAMETER_TABLE)

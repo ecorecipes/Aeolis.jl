@@ -125,9 +125,9 @@ const MARRAM_TRAIT_TABLE = Tuple{Symbol,Float64,String,Symbol,Float64,Float64,St
                                           "Speed of the front of a spreading patch"),
                                          (:f_jump, 0.1, "-", :P, 0.0, 0.3, "Bonte2021",
                                           "Fraction of colonisations that jump beyond the neighbours"),
-                                         (:jump_distance, 3.0, "cells", :P, 2.0, 5.0,
+                                         (:jump_distance, 0.6, "m", :P, 0.4, 1.0,
                                           "Bonte2021",
-                                          "Distance of a jump"),
+                                          "Distance of a jump (three cells of 0.2 m in Bonte et al.)"),
                                          (:N_new, 0.05, "-", :P, 0.01, 0.1, "",
                                           "Shoot density of a newly colonised cell, relative to N_max"),
                                          (:h_new, 0.2, "m", :P, 0.1, 0.4, "",
@@ -779,7 +779,9 @@ The [`MarramCell`](@ref) after `dt` days under `forcing`, a named tuple with:
 - `dzb`, the rate of bed-level change (m per day);
 - optionally `rain` and `pet` (mm per day), which update the root-zone bucket;
 - optionally `s`, a prescribed root-zone moisture, used instead of the bucket;
-- optionally `submerged` (`true` while the bed is under the sea);
+- optionally `submerged`, `true` while the bed is under the sea, or the fraction of the step
+  it was under water. Submergence accumulates while it lasts and resets after a step without
+  any; repeated tidal flooding therefore counts as exposure to seawater (evidence **P**);
 - optionally `u`, the wind speed (m s⁻¹);
 - optionally `supply`, a capillary supply from groundwater (mm per day).
 
@@ -791,7 +793,8 @@ The order of the update:
 3. The shoot density. Its exact logistic solution has the mortality of the step, where the
    flooding and drought losses are the exact integrals of their hazards over the step.
 4. Canopy height, roots (growing quickly toward their target and dying back slowly above it),
-   the rooted layer and pressure ([`pressure_step`](@ref)).
+   the rooted layer and pressure ([`pressure_step`](@ref); in a bare cell, pressure fades with
+   `tau_relief`).
 
 Every relaxation uses its exact solution, so states stay non-negative and bounded for any
 `dt`. A cell whose rooted layer is eroded away, or whose density falls below `N_min`, becomes
@@ -811,8 +814,9 @@ function marram_step(c::MarramCell, f, tr::MarramTraits, dt::Real)
         c.s
     end
     tdry = s < tr.s_w ? c.tdry + dt : 0.0
-    sub = hasproperty(f, :submerged) && f.submerged
-    Dsub = sub ? c.Dsub + dt : 0.0
+    wet = hasproperty(f, :submerged) ? clamp(Float64(f.submerged), 0.0, 1.0) : 0.0
+    sub = wet > 0
+    Dsub = sub ? c.Dsub + wet * dt : 0.0
     mid = MarramCell(c.N, c.h, c.Br, c.zr, s, c.P, c.Dsub, c.tdry, zdot)
     r = marram_rates(mid, f, tr)
     # exact integrals of the drought and flooding hazards over the step
@@ -832,7 +836,9 @@ function marram_step(c::MarramCell, f, tr::MarramTraits, dt::Real)
     end
     tau_r = c.Br < r.Br_eq ? tr.tau_r_grow : tr.tau_r_decay
     Br = _relax(c.Br, r.Br_eq, dt, tau_r * DAYS_PER_YEAR)
-    P = pressure_step(c.P, r.d, dt, tr)
+    # without a host, root-feeding soil biota fade as they are relieved by fresh sand
+    P = c.N > 0 ? pressure_step(c.P, r.d, dt, tr) :
+        _relax(c.P, 0.0, dt, tr.tau_relief * DAYS_PER_YEAR)
     zr = c.N > 0 ? clamp(c.zr + dzb * dt, 0.0, tr.zr_max) : c.zr
     if N < tr.N_min || (c.N > 0 && zr <= 0)
         N, h = 0.0, 0.0

@@ -6,7 +6,8 @@
     initialize_vegetation!(s, m)
 
 Vegetation cover from `veg_file` (negative values set to zero), height
-`hveg_max * sqrt(cover)`, and the vegetated cells.
+`hveg_max * sqrt(cover)`, and the vegetated cells. With `veg_model = marram`, marram grass is
+set up from the cover ([`initialize_marram!`](@ref)).
 """
 function initialize_vegetation!(s::AeolisState, m::AeolisModel)
     p = m.p
@@ -22,6 +23,7 @@ function initialize_vegetation!(s::AeolisState, m::AeolisModel)
     if p.vegshear_type == :okin
         m.okin = RotationGrid(p.dx, p.dy, 100.0)
     end
+    p.process_vegetation && p.veg_model == :marram && initialize_marram!(s, m)
     return s
 end
 

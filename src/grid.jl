@@ -43,6 +43,7 @@ mutable struct AeolisModel{T<:AbstractFloat,R<:Random.AbstractRNG}
     rng::R
     counters::Dict{Symbol,Int}
     prev::AeolisState{T}          # the state at the start of the step (AeoLiS `l`)
+    veg::Any                      # marram grass traits and water forcing, or nothing
 end
 
 function _count!(m::AeolisModel, name::Symbol, n::Int=1)
@@ -102,9 +103,12 @@ function _check_inputs(p::AeolisParameters)
     _check_option(:method_shear, p.method_shear, (:fft, :quasi2d, :duna2d))
     _check_option(:vegshear_type, p.vegshear_type, (:raupach, :okin))
     _check_option(:veg_model, p.veg_model, (:legacy, :marram))
-    p.process_vegetation && p.veg_model == :marram &&
-        throw(UnsupportedOptionError(:veg_model, :marram,
-                                     "the marram grass grid model is not implemented yet; the single-cell model is (simulate_marram)"))
+    p.veg_interval > 0 ||
+        throw(ConfigurationError("veg_interval must be positive, got $(p.veg_interval)"))
+    p.veg_water_file === nothing ||
+        (ndims(p.veg_water_file) == 2 &&
+         size(p.veg_water_file, 2) >= 3) ||
+        throw(ConfigurationError("veg_water_file must be a matrix with columns time, rainfall and potential evapotranspiration"))
     _check_option(:boundary_offshore, p.boundary_offshore,
                   (:flux, :noflux, :constant, :uniform, :gradient, :circular, :re_circular))
     _check_option(:boundary_onshore, p.boundary_onshore,
@@ -175,7 +179,7 @@ function setup_model(p::AeolisParameters; T::Type{<:AbstractFloat}=Float64,
                                        nothing,
                                        Dict{Symbol,Float64}(), nothing, 0.0, 0.0, p.tstart,
                                        rng,
-                                       Dict{Symbol,Int}(), copy(s))
+                                       Dict{Symbol,Int}(), copy(s), nothing)
     _setup_forcing!(model)
     initialize_grid!(s, model)
     initialize_bed!(s, model)
