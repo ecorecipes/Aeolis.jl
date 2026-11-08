@@ -38,6 +38,7 @@ sources, are in [`vignettes/`](https://github.com/ecorecipes/Aeolis.jl/tree/main
 | [12 Calibration](tutorials/12_calibration.md) | fitting transport parameters to flux observations with Optimization.jl |
 | [13 Marram grass](tutorials/13_marram_grass.md) | a model of marram grass in one cell, and the published experiments it is calibrated to |
 | [14 A foredune built by marram grass](tutorials/14_marram_foredune.md) | marram grass on a transect: trapping, burial, spread, and planting density |
+| [15 Uncertainty in the marram grass model](tutorials/15_marram_uncertainty.md) | Sobol indices of the priors, history matching against the calibration experiments, and an ensemble of foredunes and storms |
 
 ## Processes and formulations
 

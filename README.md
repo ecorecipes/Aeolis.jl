@@ -81,6 +81,7 @@ The vignettes run from simple to advanced:
 | [12 Calibration](vignettes/12_calibration/12_calibration.md) | fitting transport parameters to flux observations with Optimization.jl |
 | [13 Marram grass](vignettes/13_marram_grass/13_marram_grass.md) | a model of marram grass in one cell, and the published experiments it is calibrated to |
 | [14 A foredune built by marram grass](vignettes/14_marram_foredune/14_marram_foredune.md) | marram grass on a transect: trapping, burial, spread, and planting density |
+| [15 Uncertainty in the marram grass model](vignettes/15_marram_uncertainty/15_marram_uncertainty.md) | Sobol indices of the priors, history matching against the calibration experiments, and an ensemble of foredunes and storms |
 
 Each vignette is also published as a tutorial in the
 [documentation](https://ecorecipes.github.io/Aeolis.jl/), and is rendered to HTML, Markdown and PDF in its directory

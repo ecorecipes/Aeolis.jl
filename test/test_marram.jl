@@ -268,3 +268,26 @@ end
     @test eroded(1.0, 10.0) / bare ≈ 2.5 / 3.5 atol = 0.06
     @test eroded(2.5, 10.0) / bare ≈ 0.5 atol = 0.06
 end
+
+@testset "marram trait sampling" begin
+    tr = MarramTraits()
+    r = marram_ranges()
+    @test !isempty(r) && all(x -> marram_info(x.name).evidence == :P, r)
+    @test all(x -> x.low < x.high, r)
+    @test length(marram_ranges(; evidence=(:M, :D, :P))) > length(r)
+    @test length(marram_ranges(; add=(:tau_P,))) == length(r) + 1
+    @test_throws ArgumentError marram_ranges(; add=(:tau_p,))
+    draws = marram_sample(Random.Xoshiro(1), 20)
+    @test length(draws) == 20
+    for d in draws, x in r
+        @test x.low <= getfield(d, x.name) <= x.high
+    end
+    @test all(d -> d.N_max == tr.N_max, draws)        # measured traits keep their values
+    t2 = MarramTraits(tr, [:p_max, :T_r], [0.5, 20.0])
+    @test t2.p_max == 0.5 && t2.T_r == 20.0 && t2.r == tr.r
+    @test_throws ArgumentError MarramTraits(tr, [:p_max], [0.5, 1.0])
+    mktempdir() do dir
+        f = write_marram_traits(joinpath(dir, "t.toml"), draws[3])
+        @test marram_traits(f) == draws[3]
+    end
+end

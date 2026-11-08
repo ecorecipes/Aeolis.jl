@@ -303,6 +303,66 @@ function marram_traits(p::AeolisParameters)
 end
 
 """
+    write_marram_traits(file, tr::MarramTraits)
+
+Write every trait of `tr` to a TOML file that [`marram_traits`](@ref) reads back, for example
+to give each member of an ensemble its own `veg_traits_file`.
+"""
+function write_marram_traits(file::AbstractString, tr::MarramTraits)
+    open(file, "w") do io
+        for n in MARRAM_TRAIT_NAMES
+            println(io, n, " = ", repr(getfield(tr, n)))
+        end
+    end
+    return file
+end
+
+"""
+    MarramTraits(tr::MarramTraits, names, values)
+
+A copy of the traits `tr` with the traits `names` set to `values`, the form a sensitivity
+analysis needs.
+"""
+function MarramTraits(tr::MarramTraits, names::AbstractVector{Symbol},
+                      values::AbstractVector)
+    length(names) == length(values) ||
+        throw(ArgumentError("got $(length(names)) trait names and $(length(values)) values"))
+    return MarramTraits(tr; (n => v for (n, v) in zip(names, values))...)
+end
+
+"""
+    marram_ranges(; evidence=(:P,), add=())
+
+The traits whose evidence grade is in `evidence`, and the traits named in `add`, with their
+plausible ranges, as `(name, low, high)` named tuples. Traits whose range is a single value are
+left out.
+"""
+function marram_ranges(; evidence=(:P,), add=())
+    for n in add
+        haskey(MARRAM_TRAIT_INDEX, n) || throw(_unknown_trait(n))
+    end
+    return [(; name=r[1], low=r[5], high=r[6])
+            for r in MARRAM_TRAIT_TABLE if (r[4] in evidence || r[1] in add) && r[5] < r[6]]
+end
+
+"""
+    marram_sample(rng, n; evidence=(:P,), add=(), base=MarramTraits())
+
+`n` trait sets in which every trait of [`marram_ranges`](@ref)`(; evidence, add)` is drawn
+uniformly from its range and the others keep their values in `base`. Draws are independent,
+so they do not respect correlations that calibration would impose. Checking each draw against
+[`marram_experiment`](@ref) is a way to keep only plausible ones.
+"""
+function marram_sample(rng::Random.AbstractRNG, n::Integer; evidence=(:P,), add=(),
+                       base::MarramTraits=MarramTraits())
+    ranges = marram_ranges(; evidence, add)
+    names = [r.name for r in ranges]
+    return [MarramTraits(base, names,
+                         [r.low + (r.high - r.low) * rand(rng) for r in ranges])
+            for _ in 1:n]
+end
+
+"""
     marram_info([name])
 
 A table of every marram trait as `(name, default, unit, evidence, range, source,

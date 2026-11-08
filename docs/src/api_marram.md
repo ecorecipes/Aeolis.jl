@@ -59,6 +59,9 @@ Markdown.parse(join(["| Trait | Default | Unit | Evidence | Range | Source | Des
 MarramTraits
 marram_traits
 marram_info
+write_marram_traits
+marram_ranges
+marram_sample
 ```
 
 ## One cell

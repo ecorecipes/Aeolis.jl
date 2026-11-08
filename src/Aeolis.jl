@@ -61,7 +61,8 @@ export AeolisError, ConfigurationError, UnknownOptionError, UnsupportedOptionErr
 export AeolisParameters, parameter_info, remake_parameters
 export AeolisState, state_info
 export MarramTraits, marram_traits, marram_info, MarramCell, marram_rates, marram_step,
-       simulate_marram, marram_experiment
+       simulate_marram, marram_experiment, marram_ranges, marram_sample,
+       write_marram_traits
 export AeolisProblem, AeolisIntegrator, AeolisSolution, transect, statistic
 export AbstractAeolisAlgorithm, EulerBackward, CrankNicolson, EulerForward,
        default_algorithm
