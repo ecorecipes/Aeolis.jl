@@ -2,8 +2,7 @@
 # surveys re-run as single-cell simulations, each returned next to the published numbers.
 
 const MARRAM_EXPERIMENTS = (:reijers2021, :nolet2018, :dixon2004, :aptekar2000,
-                            :lammers2024,
-                            :homberger2024)
+                            :lammers2024, :homberger2024, :root_erosion)
 
 """
     marram_experiment(name, tr=MarramTraits())
@@ -35,6 +34,16 @@ model's results next to the published ones. The experiments are:
   the range where plants died) in steps of 2.2 %. Pot hydrology is not modelled: the pots
   held water above the field capacity of free-draining sand. Compares shoot growth with the
   observed death in the driest pots and the continued rise with moisture.
+
+- `:root_erosion`: the reduction of wave-driven dune erosion by roots, `c_r / (tau0 + c_r)`
+  (see `dune_erosion!`). It is computed in two ways:
+  - with the root reinforcement of about 1 kPa that [Figlus2014](@citet) measured in shear
+    tests of their rooted flume dunes, where erosion fell by 33 % under regular and 8 % under
+    irregular waves;
+  - with the reinforcement of a model stand grown for five years under 0.3 m of burial per
+    season, against the 36 % of intact cores of mature *Ammophila* under swash
+    ([DeBattisti2020](@citet)) and up to 31 % in scaled flume experiments with marram
+    ([Kosmalla2026](@citet)).
 
 Returns a named tuple with `name`, `description`, and model and observed values whose fields
 depend on the experiment.
@@ -133,4 +142,18 @@ function _experiment(::Val{:homberger2024}, tr::MarramTraits)
             description="132-day pot experiment at seven levels of soil moisture",
             moisture=theta, shoots=[r.N[end] / N0 for r in runs],
             mortality_moisture_observed=(0.033, 0.048), solutions=runs)
+end
+
+function _experiment(::Val{:root_erosion}, tr::MarramTraits)
+    z = 0.3 / season_length(tr)
+    sol = simulate_marram(MarramCell(; N=tr.N_new * tr.N_max, h=tr.h_new, zr=tr.zr_new,
+                                     s=tr.s_fc), (t, d) -> (; dzb=z, s=tr.s_fc), tr;
+                          days=5 * 365, start=Dates.Date(2020, 1, 1))
+    cr = sol.cr[end]
+    reduction(c) = c / (tr.tau0 + c)
+    return (; name=:root_erosion, description="reduction of dune erosion by roots",
+            figlus_cr=1.0, figlus_reduction=reduction(1.0),
+            figlus_observed=(regular=0.33, irregular=0.08), stand_cr=cr,
+            stand_reduction=reduction(cr),
+            stand_observed=(debattisti=0.36, kosmalla=0.31), solution=sol)
 end

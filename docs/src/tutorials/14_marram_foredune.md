@@ -6,7 +6,8 @@ Simon Frost
 - [The dune](#the-dune)
 - [The plants](#the-plants)
 - [How densely to plant](#how-densely-to-plant)
-- [What is not yet coupled](#what-is-not-yet-coupled)
+- [A storm](#a-storm)
+- [What remains uncertain](#what-remains-uncertain)
 
 ## Overview
 
@@ -29,8 +30,10 @@ and the plants and the bed are coupled both ways:
 - **Plants spread.** Bare cells are colonised from occupied neighbours
   at about 0.4 m per year ([Keijsers et al. 2015](#ref-Keijsers2015)),
   with occasional jumps ([Bonte et al. 2021](#ref-Bonte2021)).
-
-Dune erosion by waves does not yet feel the roots.
+- **Roots resist waves.** When a storm cuts back the dune, sand in the
+  rooted layer costs more of the waves’ work to remove than bare sand
+  ([Figlus et al. 2014](#ref-Figlus2014); [De Battisti and Griffin
+  2020](#ref-DeBattisti2020)).
 
 ``` julia
 ENV["GKSwstype"] = "100"
@@ -197,13 +200,68 @@ with the area planted. Why the two differ is not yet understood. The
 supply of sand, the measure of dune growth, and how trapping depends on
 cover in their cellular model are candidates.
 
-## What is not yet coupled
+## A storm
 
-- **Dune erosion by waves** does not feel the roots. Plants are removed
-  when erosion strips their rooted layer, but the roots do not slow the
-  erosion.
-- **The burial response and soil-biota pressure** rest on few studies;
-  their uncertainty is in `marram_info`.
+After the three years, a storm attacks the dune for two days. A surge of
+2.5 m and waves 3 m high with a 10 s period collide with the dune face,
+which erodes as in Palmsten and Holman ([2012](#ref-Palmsten2012)).
+
+The storm run starts from the state after three years (`u0`), so the
+roots are those the dune grew. It is repeated with the roots made
+ineffective: a traits file sets the strength of bare sand, `tau0`, so
+high that reinforcement adds nothing. The light wind moves no sand.
+
+The dune toe is set at 2.7 m. AeoLiS takes as the toe the point of the
+profile nearest that elevation, and the hinterland lies at exactly 3 m.
+
+``` julia
+t0 = years * 365day
+storm = (; tstart=t0, tstop=t0 + 2day, output_times=2day,
+         wind_file=[0.0 2.0 270.0; 4000day 2.0 270.0], tide_file=[0.0 2.5; 4000day 2.5],
+         wave_file=[0.0 3.0 10.0; 4000day 3.0 10.0], process_wave=true, process_runup=true,
+         process_dune_erosion=true, dune_toe_elevation=2.7, beach_slope=0.04)
+inert = tempname() * ".toml"
+write(inert, "tau0 = 1e12\n")
+u3 = marram.u
+eroded = Dict{String,Float64}()
+plt = plot(x, u3.zb[:, 2]; color=:black, lw=2, label="before the storm",
+           xlabel="distance (m)", ylabel="bed level (m)", xlims=(90, 135), legend=:topleft)
+for (label, kw, c) in (("with roots", (;), :darkgreen), ("roots ineffective", (; veg_traits_file=inert), :orange))
+    p = AeolisParameters(; base..., storm..., process_vegetation=true, veg_model=:marram,
+                         veg_file=planting, kw...)
+    z1 = solve(AeolisProblem(p; u0=u3); rng=Xoshiro(3)).u.zb[:, 2]
+    eroded[label] = sum(max.(u3.zb[:, 2] .- z1, 0.0))
+    plot!(plt, x, z1; lw=2, color=c, label=label)
+end
+@printf("eroded: %.1f m³/m with roots, %.1f m³/m without; %.0f %% less\n",
+        eroded["with roots"], eroded["roots ineffective"],
+        100 * (1 - eroded["with roots"] / eroded["roots ineffective"]))
+plt
+```
+
+    eroded: 29.7 m³/m with roots, 42.6 m³/m without; 30 % less
+
+![](14_marram_foredune_files/figure-commonmark/cell-10-output-2.svg)
+
+The roots keep a third of the dune face that the storm would otherwise
+take. Flume experiments found 8-37 % less erosion with vegetation
+([Figlus et al. 2014](#ref-Figlus2014); [Kosmalla et al.
+2026](#ref-Kosmalla2026)), and intact cores of marram 36 % ([De Battisti
+and Griffin 2020](#ref-DeBattisti2020)). The fine-root fraction of the
+traits was fitted to these, and the run falls in their range.
+
+The model does not represent one effect seen in a large flume ([Feagin
+et al. 2023](#ref-Feagin2023)): a vegetated dune that eroded faster,
+because plants changed the run-up and infiltration of the swash.
+
+## What remains uncertain
+
+- **The burial response and soil-biota pressure** rest on few studies.
+- **Root reinforcement:** the tensile strength of marram roots has not
+  been measured, and the erosion data constrain only its product with
+  the fine-root fraction.
+
+Both uncertainties are listed with ranges in `marram_info`.
 
 ```@raw html
 <div id="refs" class="references csl-bib-body hanging-indent">
@@ -223,6 +281,45 @@ Development.” *Frontiers in Ecology and Evolution* 9: 761336.
 ```
 
 ```@raw html
+<div id="ref-DeBattisti2020" class="csl-entry">
+```
+
+De Battisti, Davide, and John N. Griffin. 2020. “Below-Ground Biomass of
+Plants, with a Key Contribution of Buried Shoots, Increases Foredune
+Resistance to Wave Swash.” *Annals of Botany* 125: 325–34.
+<https://doi.org/10.1093/aob/mcz125>.
+
+```@raw html
+</div>
+```
+
+```@raw html
+<div id="ref-Feagin2023" class="csl-entry">
+```
+
+Feagin, Rusty A., Rachel A. Innocenti, Hailey Bond, et al. 2023. “Does
+Vegetation Accelerate Coastal Dune Erosion During Extreme Events?”
+*Science Advances* 9: eadg7135.
+<https://doi.org/10.1126/sciadv.adg7135>.
+
+```@raw html
+</div>
+```
+
+```@raw html
+<div id="ref-Figlus2014" class="csl-entry">
+```
+
+Figlus, Jens, Jacob M. Sigren, Anna R. Armitage, and Robert C. Tyler.
+2014. “Erosion of Vegetated Coastal Dunes.” *Coastal Engineering
+Proceedings* 1 (34): sediment.20.
+<https://doi.org/10.9753/icce.v34.sediment.20>.
+
+```@raw html
+</div>
+```
+
+```@raw html
 <div id="ref-Keijsers2015" class="csl-entry">
 ```
 
@@ -230,6 +327,20 @@ Keijsers, Joep G. S., Alma V. De Groot, and Michel J. P. M. Riksen.
 2015. “Vegetation and Sedimentation on Coastal Foredunes.”
 *Geomorphology* 228: 723–34.
 <https://doi.org/10.1016/j.geomorph.2014.10.027>.
+
+```@raw html
+</div>
+```
+
+```@raw html
+<div id="ref-Kosmalla2026" class="csl-entry">
+```
+
+Kosmalla, Viktoria, Oliver Lojek, Lukas Ahrenbeck, et al. 2026.
+“Vegetation Effects on Dune Erosion Under Wave Collision: Influence of
+Planting Density, Biomass Distribution and Arrangement in Scaled
+Experiments.” *Coastal Engineering* 204: 104899.
+<https://doi.org/10.1016/j.coastaleng.2025.104899>.
 
 ```@raw html
 </div>
@@ -258,6 +369,18 @@ Suomalainen, Juul Limpens, and Michel Riksen. 2018. “UAV-Imaging
 to Model Growth Response of Marram Grass to Sand Burial: Implications
 for Coastal Dune Development.” *Aeolian Research* 31: 50–61.
 <https://doi.org/10.1016/j.aeolia.2017.08.006>.
+
+```@raw html
+</div>
+```
+
+```@raw html
+<div id="ref-Palmsten2012" class="csl-entry">
+```
+
+Palmsten, Margaret L., and Robert A. Holman. 2012. “Laboratory
+Investigation of Dune Erosion Using Stereo Video.” *Coastal Engineering*
+60: 123–35. <https://doi.org/10.1016/j.coastaleng.2011.09.003>.
 
 ```@raw html
 </div>

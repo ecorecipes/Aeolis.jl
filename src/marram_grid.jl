@@ -38,6 +38,7 @@ function initialize_marram!(s::AeolisState, m::AeolisModel)
     s.veg_wet .= 0
     s.veg_H .= 0
     _draw_thresholds!(s, m, trues(size(s.veg_E)))
+    s.veg_cr .= reinforcement.(s.veg_Br, s.veg_zr, Ref(tr))
     s.hveg .= ifelse.(s.veg_N .> 0, tr.h_new, 0.0)
     s.vegetated .= s.veg_N .> 0
     marram_cover!(s, m)

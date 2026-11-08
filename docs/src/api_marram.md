@@ -21,7 +21,10 @@ the default `veg_model = legacy` is AeoLiS's vegetation. The grid model is set u
 [`Aeolis.initialize_marram!`](@ref):
 - each time step, [`Aeolis.marram_cover!`](@ref) gives the shear reduction its cover;
 - every `veg_interval`, [`Aeolis.marram_update!`](@ref) advances the cells and
-  [`Aeolis.marram_colonise!`](@ref) colonises bare ones.
+  [`Aeolis.marram_colonise!`](@ref) colonises bare ones;
+- with `process_dune_erosion`, roots resist the cut-back of [`Aeolis.dune_erosion!`](@ref):
+  sand in a cell's rooted layer costs `1 + veg_cr / tau0` times as much of the waves' work
+  as bare sand.
 
 The grid model's parameters are:
 

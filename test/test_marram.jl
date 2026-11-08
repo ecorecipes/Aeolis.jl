@@ -237,3 +237,34 @@ end
     solve!(integ)
     @test integ.u.veg_fW[1, 2] == 0 && integ.u.veg_s[1, 2] < tr.s_w
 end
+
+@testset "marram roots and dune erosion" begin
+    e = marram_experiment(:root_erosion)
+    @test e.figlus_reduction ≈ 1 / 3.5
+    @test e.stand_observed.kosmalla - 0.05 <= e.stand_reduction <=
+          e.stand_observed.debattisti + 0.05
+    @test Aeolis._resisted_depth(1.0, 0.0, 0.0, 5.0, 2.5) == 1.0
+    @test Aeolis._resisted_depth(1.0, 0.0, 2.0, 2.5, 2.5) == 2.0
+    @test Aeolis._resisted_depth(1.0, 0.0, 0.5, 2.5, 2.5) == 1.5
+    dir = joinpath(@__DIR__, "data", "case3_erosion_avalanching")
+    p = read_config(joinpath(dir, "aeolis.txt"); veg_model=:marram, output_file=nothing)
+    integ = init(AeolisProblem(p))
+    for _ in 1:3
+        step!(integ)
+    end
+    s0 = copy(integ.u)
+    m = integ.model
+    m.dt_opt = 86400.0         # a day of collision, so the cut spans many cells
+    function eroded(cr, zr)
+        s = copy(s0)
+        s.veg_cr .= cr
+        s.veg_zr .= zr
+        Aeolis.dune_erosion!(s, m, integ.t)
+        return sum(s0.zb[:, 2] .- s.zb[:, 2])
+    end
+    bare = eroded(0.0, 0.0)
+    @test bare > 0
+    @test eroded(2.0, 0.0) == bare                       # no rooted layer, no resistance
+    @test eroded(1.0, 10.0) / bare ≈ 2.5 / 3.5 atol = 0.06
+    @test eroded(2.5, 10.0) / bare ≈ 0.5 atol = 0.06
+end

@@ -65,8 +65,8 @@ end
 ```
 
     M: 31 traits
-    D: 15 traits
-    P: 19 traits
+    D: 16 traits
+    P: 18 traits
     burial_window     30 day          P  Nolet2018
     burial_opt     0.31 m/season     M  Nolet2018
     burial_c_lo       2 m/season     D  Reijers2021

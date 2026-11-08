@@ -28,8 +28,8 @@ coupled both ways:
   - the day of the year from `refdate`.
 - **Plants spread.** Bare cells are colonised from occupied neighbours at about 0.4 m per
   year [@Keijsers2015], with occasional jumps [@Bonte2021].
-
-Dune erosion by waves does not yet feel the roots.
+- **Roots resist waves.** When a storm cuts back the dune, sand in the rooted layer costs
+  more of the waves' work to remove than bare sand [@Figlus2014; @DeBattisti2020].
 
 ```{julia}
 #| output: false
@@ -171,9 +171,56 @@ with the area planted. Why the two differ is not yet understood. The supply of s
 measure of dune growth, and how trapping depends on cover in their cellular model are
 candidates.
 
-## What is not yet coupled
+## A storm
 
-- **Dune erosion by waves** does not feel the roots. Plants are removed when erosion strips
-  their rooted layer, but the roots do not slow the erosion.
-- **The burial response and soil-biota pressure** rest on few studies; their uncertainty is
-  in `marram_info`.
+After the three years, a storm attacks the dune for two days. A surge of 2.5 m and waves 3 m
+high with a 10 s period collide with the dune face, which erodes as in @Palmsten2012.
+
+The storm run starts from the state after three years (`u0`), so the roots are those the dune
+grew. It is repeated with the roots made ineffective: a traits file sets the strength of bare
+sand, `tau0`, so high that reinforcement adds nothing. The light wind moves no sand.
+
+The dune toe is set at 2.7 m. AeoLiS takes as the toe the point of the profile nearest that
+elevation, and the hinterland lies at exactly 3 m.
+
+```{julia}
+t0 = years * 365day
+storm = (; tstart=t0, tstop=t0 + 2day, output_times=2day,
+         wind_file=[0.0 2.0 270.0; 4000day 2.0 270.0], tide_file=[0.0 2.5; 4000day 2.5],
+         wave_file=[0.0 3.0 10.0; 4000day 3.0 10.0], process_wave=true, process_runup=true,
+         process_dune_erosion=true, dune_toe_elevation=2.7, beach_slope=0.04)
+inert = tempname() * ".toml"
+write(inert, "tau0 = 1e12\n")
+u3 = marram.u
+eroded = Dict{String,Float64}()
+plt = plot(x, u3.zb[:, 2]; color=:black, lw=2, label="before the storm",
+           xlabel="distance (m)", ylabel="bed level (m)", xlims=(90, 135), legend=:topleft)
+for (label, kw, c) in (("with roots", (;), :darkgreen), ("roots ineffective", (; veg_traits_file=inert), :orange))
+    p = AeolisParameters(; base..., storm..., process_vegetation=true, veg_model=:marram,
+                         veg_file=planting, kw...)
+    z1 = solve(AeolisProblem(p; u0=u3); rng=Xoshiro(3)).u.zb[:, 2]
+    eroded[label] = sum(max.(u3.zb[:, 2] .- z1, 0.0))
+    plot!(plt, x, z1; lw=2, color=c, label=label)
+end
+@printf("eroded: %.1f m³/m with roots, %.1f m³/m without; %.0f %% less\n",
+        eroded["with roots"], eroded["roots ineffective"],
+        100 * (1 - eroded["with roots"] / eroded["roots ineffective"]))
+plt
+```
+
+The roots keep a third of the dune face that the storm would otherwise take. Flume
+experiments found 8-37 % less erosion with vegetation [@Figlus2014; @Kosmalla2026], and
+intact cores of marram 36 % [@DeBattisti2020]. The fine-root fraction of the traits was fitted
+to these, and the run falls in their range.
+
+The model does not represent one effect seen in a large flume
+[@Feagin2023]: a vegetated dune that eroded faster, because plants changed the run-up and
+infiltration of the swash.
+
+## What remains uncertain
+
+- **The burial response and soil-biota pressure** rest on few studies.
+- **Root reinforcement:** the tensile strength of marram roots has not been measured, and
+  the erosion data constrain only its product with the fine-root fraction.
+
+Both uncertainties are listed with ranges in `marram_info`.

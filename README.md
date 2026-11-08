@@ -27,7 +27,8 @@ and reproduces its results to round-off on the AeoLiS regression cases and on ca
 - Beyond AeoLiS, a model of marram grass in one cell, calibrated to published experiments: shoot density, canopy
   height, roots, rooted depth, root-zone water and soil-biota pressure, with the source and evidence grade of every
   trait (`MarramTraits`, `simulate_marram`, `marram_experiment`), and coupled to the grid with `veg_model = marram`:
-  the canopy reduces wind shear, burial, flooding and water drive the plants, and bare cells are colonised.
+  the canopy reduces wind shear, burial, flooding and water drive the plants, bare cells are colonised, and roots
+  slow wave erosion of the dune.
 - Transport solvers: the implicit `Trunk` and finite-volume `Pieter` solvers with Euler backward, Crank-Nicolson
   or Euler forward schemes, and a `SteadyState` sweep; sparse systems solved with LinearSolve.jl.
 - `AeolisProblem`, `init`, `step!`, `solve`, `remake`, SciMLBase callbacks and ensembles; AeoLiS configuration
