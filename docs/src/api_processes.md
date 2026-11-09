@@ -64,6 +64,7 @@ Aeolis.state_dims
 Aeolis.copyto_state!
 Aeolis.parse_value
 Aeolis.rotate
+Aeolis.rotate!
 Aeolis.normalize_along
 Aeolis.prevent_tiny_negatives!
 Aeolis.apply_mask!

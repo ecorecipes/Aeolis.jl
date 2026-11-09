@@ -24,6 +24,25 @@ function rotate(x::Real, y::Real, alpha::Real; origin=(0.0, 0.0))
 end
 
 """
+    rotate!(x, y, alpha; origin=(0, 0))
+
+[`rotate`](@ref) in place: `x` and `y` are overwritten by the rotated points, with the
+same arithmetic and so the same values.
+"""
+function rotate!(x::AbstractArray, y::AbstractArray, alpha::Real; origin=(0.0, 0.0))
+    a = alpha / 180.0 * pi
+    c, s = cos(a), sin(a)
+    o1, o2 = origin
+    for k in eachindex(x, y)
+        xr = x[k] - o1
+        yr = y[k] - o2
+        x[k] = xr * c + yr * s + o1
+        y[k] = -xr * s + yr * c + o2
+    end
+    return x, y
+end
+
+"""
     normalize_along(x, dim; ref=nothing, fill=0.0)
 
 `x` divided by its sum along `dim` (or by `ref`), with `fill` where the divisor is zero
@@ -31,7 +50,7 @@ end
 """
 function normalize_along(x::AbstractArray, dim::Integer; ref=nothing, fill=0.0)
     r = ref === nothing ? sum(x; dims=dim) : ref
-    return map((a, b) -> b != 0 ? a / b : oftype(a, fill), x, r .+ zero(x))
+    return broadcast((a, b) -> b != 0 ? a / b : oftype(a, fill), x, r)
 end
 
 """
@@ -140,24 +159,24 @@ An `n` by `n` sparse matrix with `diagonals[k]` on diagonal `offsets[k]`, placed
 is taken from a shifted copy of a coefficient array.
 """
 function diags(diagonals, offsets, n::Integer)
-    I = Int[]
-    J = Int[]
-    V = Float64[]
+    nnz = sum(d -> max(n - abs(d), 0), offsets; init=0)
+    I = Vector{Int}(undef, nnz)
+    J = Vector{Int}(undef, nnz)
+    V = Vector{Float64}(undef, nnz)
+    k = 0
     for (v, d) in zip(diagonals, offsets)
         m = n - abs(d)
         length(v) >= m ||
             throw(ArgumentError("diagonal at offset $d needs $m values, got $(length(v))"))
         for i in 1:m
-            if d >= 0
-                push!(I, i)
-                push!(J, i + d)
-            else
-                push!(I, i - d)
-                push!(J, i)
-            end
-            push!(V, v[i])
+            k += 1
+            I[k], J[k] = d >= 0 ? (i, i + d) : (i - d, i)
+            V[k] = v[i]
         end
     end
+    resize!(I, k)
+    resize!(J, k)
+    resize!(V, k)
     return SparseArrays.sparse(I, J, V, n, n)
 end
 

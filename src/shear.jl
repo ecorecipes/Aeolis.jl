@@ -67,7 +67,10 @@ function _shear_interpolate(sh, x, y, z, xi, yi, fill)
     r = [pad_odd_reflect(view(x, c, :), w)[1] for c in axes(x, 1)]
     xg = pad_odd_reflect(r, w)
     # first column of the padded y-coordinates
-    P0 = reduce(vcat, (permutedims(pad_odd_reflect(view(y, c, :), w)) for c in axes(y, 1)))
+    P0 = Matrix{Float64}(undef, size(y, 1), size(y, 2) + 2w)
+    for c in axes(y, 1)
+        P0[c, :] .= pad_odd_reflect(view(y, c, :), w)
+    end
     yg = [pad_odd_reflect(view(P0, :, k), w)[1] for k in axes(P0, 2)]
     return _padded_interp(xg, yg, z, w, xi, yi, fill)
 end

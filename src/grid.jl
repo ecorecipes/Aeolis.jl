@@ -275,21 +275,15 @@ grain velocities) by `angle` degrees, and add `angle` to the wind direction (Aeo
 `grid_rotate`).
 """
 function grid_rotate!(s::AeolisState, m::AeolisModel, angle::Real)
-    x, y = rotate(s.x, s.y, angle; origin=(mean(s.x), mean(s.y)))
-    s.x .= x
-    s.y .= y
+    rotate!(s.x, s.y, angle; origin=(mean(s.x), mean(s.y)))
     for (a, b) in ((:taus, :taun), (:taus0, :taun0), (:ustars, :ustarn),
                    (:ustars0, :ustarn0), (:uws, :uwn))
-        u, v = rotate(getfield(s, a), getfield(s, b), angle)
-        getfield(s, a) .= u
-        getfield(s, b) .= v
+        rotate!(getfield(s, a), getfield(s, b), angle)
     end
     for i in 1:m.nf
         for (a, b) in ((:qs, :qn), (:us, :un))
             A, B = getfield(s, a), getfield(s, b)
-            u, v = rotate(A[:, :, i], B[:, :, i], angle)
-            A[:, :, i] .= u
-            B[:, :, i] .= v
+            rotate!(view(A, :, :, i), view(B, :, :, i), angle)
         end
     end
     s.udir .+= angle

@@ -24,6 +24,7 @@ using DelimitedFiles: DelimitedFiles
 using FFTW: FFTW
 using LinearAlgebra: LinearAlgebra
 using LinearSolve: LinearSolve
+using PrecompileTools: PrecompileTools
 using Random: Random
 using RecipesBase: RecipesBase
 using Serialization: Serialization
@@ -56,6 +57,7 @@ include("model.jl")
 include("problem.jl")
 include("config.jl")
 include("recipes.jl")
+include("precompile.jl")
 
 export AeolisError, ConfigurationError, UnknownOptionError, UnsupportedOptionError
 export AeolisParameters, parameter_info, remake_parameters
