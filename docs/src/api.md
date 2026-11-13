@@ -23,6 +23,8 @@ AbstractTransportSolver
 Trunk
 Pieter
 SteadyState
+SteadyStatePieter
+SciMLSteadyState
 read_config
 write_config
 run_config

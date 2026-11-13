@@ -13,8 +13,26 @@ function _initial_weights(s, m, w_init)
     if m.bedcomp !== nothing
         return copy(w_init)
     end
-    g = m.grain_dist[1, :]
-    return repeat(reshape(g, 1, 1, :), m.nx + 1, m.ny + 1, 1)
+    return _grain_dist_weights(m)
+end
+
+# The steady-state matrix solvers (`solve_steadystate`, `solve_steadystatepieter`) always
+# start from `grain_dist`, also with a bed composition file.
+_grain_dist_weights(m) = repeat(reshape(m.grain_dist[1, :], 1, 1, :), m.nx + 1, m.ny + 1, 1)
+
+# Negative concentrations set to zero, and the positive ones scaled down by the same total.
+function _rescale_negatives!(Ct_i)
+    minimum(Ct_i) < 0 || return Ct_i
+    neg = Ct_i .< 0
+    pos = .!neg
+    spos = sum(Ct_i[pos])
+    if spos != 0
+        Ct_i[pos] .*= 1 + sum(Ct_i[neg]) / spos
+    else
+        Ct_i[pos] .= 0
+    end
+    Ct_i[neg] .= 0
+    return Ct_i
 end
 
 function _linsolve_cache(A, b, linsolve)
@@ -29,14 +47,18 @@ function _linsolve!(cache, b)
 end
 
 """
-    solve_trunk(s, m, dt, alpha, beta, linsolve)
+    solve_trunk(s, m, dt, alpha, beta, linsolve; steady=false)
 
 The default AeoLiS solver: an implicit (`alpha = 1`), Crank-Nicolson (`alpha = 0.5`) or
 explicit upwind discretisation solved as a sparse linear system per fraction, iterating the
 fraction weights until the pickup is supported by the bed.
+
+With `steady = true` it is AeoLiS's `solve_steadystate` (`solver = steadystate` with
+`scheme = crank_nicolson`): the same upwind matrix without the time derivative, giving the
+concentration in equilibrium with the current wind and bed; `alpha` is then ignored.
 """
 function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta::Real,
-                     linsolve)
+                     linsolve; steady::Bool=false)
     p = m.p
     l = m.prev
     nxp, nyp = m.nx + 1, m.ny + 1
@@ -44,8 +66,16 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
     Ct = copy(s.Ct)
     pickup = copy(s.pickup)
     w_init, w_air, w_bed = compute_weights(s, m)
-    w = m.time == 0 ? _initial_weights(s, m, w_init) : copy(w_init)
-    Ti = dt / p.T
+    w = m.time != 0 ? copy(w_init) :
+        steady ? _grain_dist_weights(m) : _initial_weights(s, m, w_init)
+    if steady
+        alpha = 1.0
+        h = 1.0     # solve_steadystate has no time step in the coefficients
+        Ti = 1 / p.T
+    else
+        h = dt
+        Ti = dt / p.T
+    end
     for i in 1:nf
         us = s.us[:, :, i]
         un = s.un[:, :, i]
@@ -61,12 +91,12 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
         un_plus[:, 1] .= un[:, 1]
         us_min[end, :] .= us[end, :]
         un_min[:, end] .= un[:, end]
-        Cs = dt .* s.dn .* s.dsdni .* us
-        Cn = dt .* s.ds .* s.dsdni .* un
-        Cs_plus = dt .* s.dn .* s.dsdni .* us_plus
-        Cn_plus = dt .* s.ds .* s.dsdni .* un_plus
-        Cs_min = dt .* s.dn .* s.dsdni .* us_min
-        Cn_min = dt .* s.ds .* s.dsdni .* un_min
+        Cs = h .* s.dn .* s.dsdni .* us
+        Cn = h .* s.ds .* s.dsdni .* un
+        Cs_plus = h .* s.dn .* s.dsdni .* us_plus
+        Cn_plus = h .* s.ds .* s.dsdni .* un_plus
+        Cs_min = h .* s.dn .* s.dsdni .* us_min
+        Cn_min = h .* s.ds .* s.dsdni .* un_min
         b = abs(beta)
         if b >= 1
             ixs = Float64.(us .>= 0)
@@ -79,7 +109,8 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
             sgs = zeros(nxp, nyp)
             sgn = zeros(nxp, nyp)
         end
-        A0 = 1 .+ (sgs .* Cs .+ sgn .* Cn .+ Ti) .* alpha
+        A0 = steady ? sgs .* Cs .+ sgn .* Cn .+ Ti :
+             1 .+ (sgs .* Cs .+ sgn .* Cn .+ Ti) .* alpha
         Apx = Cn_min .* alpha .* (1 .- ixn)
         Ap1 = Cs_min .* alpha .* (1 .- ixs)
         Amx = -Cn_plus .* alpha .* ixn
@@ -97,7 +128,7 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
         Ap2[end, :] .= 0
         Amx[end, :] .= 0
         bo = p.boundary_offshore
-        if bo in (:flux, :noflux, :constant)
+        if bo in (:flux, :constant) || (bo == :noflux && !steady)
             Ap2[1, :] .= 0
             Ap1[1, :] .= 0
         elseif bo == :uniform
@@ -108,7 +139,7 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
             Ap1[1, :] .= -1 .- s.ds[2, :] ./ s.ds[3, :]
         else
             throw(UnsupportedOptionError(:boundary_offshore, bo,
-                                         "a cross-shore circular boundary is not implemented in the trunk solver"))
+                                         "the $(steady ? "steadystate" : "trunk") solver supports flux, constant, uniform and gradient offshore boundaries"))
         end
         bn = p.boundary_onshore
         if bn == :flux || bo == :noflux   # AeoLiS tests the offshore setting here
@@ -164,21 +195,28 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
             s.S .= S
             I = 2:(nxp - 1)
             y_im = zeros(nxp, nyp)
-            y_ex = zeros(nxp, nyp)
             @views y_im[I, :] .= (w[I, :, i] .* s.Cuf[I, :, i] .* Ti) .* (1 .- S[I, :]) .+
                                  (w[I, :, i] .* s.Cu[I, :, i] .* Ti) .* S[I, :]
-            lC = view(l.Ct, :, :, i)
-            @views y_ex[I, :] .= (l.w[I, :, i] .* l.Cuf[I, :, i] .* Ti) .* (1 .- S[I, :]) .+
-                                 (l.w[I, :, i] .* l.Cu[I, :, i] .* Ti) .* S[I, :] .-
-                                 (sgs[I, :] .* Cs[I, :] .+ sgn[I, :] .* Cn[I, :] .+ Ti) .*
-                                 lC[I, :] .+
-                                 ixs[I, :] .* Cs_plus[I, :] .* lC[1:(end - 2), :] .-
-                                 (1 .- ixs[I, :]) .* Cs_min[I, :] .* lC[3:end, :] .+
-                                 ixn[I, :] .* Cn_plus[I, :] .* circshift(lC[I, :], (0, 1)) .-
-                                 (1 .- ixn[I, :]) .* Cn_min[I, :] .*
-                                 circshift(lC[I, :], (0, -1))
-            y_i = zeros(nxp, nyp)
-            @views y_i[I, :] .= lC[I, :] .+ alpha .* y_im[I, :] .+ (1 - alpha) .* y_ex[I, :]
+            if steady
+                y_i = y_im
+            else
+                y_ex = zeros(nxp, nyp)
+                lC = view(l.Ct, :, :, i)
+                @views y_ex[I, :] .= (l.w[I, :, i] .* l.Cuf[I, :, i] .* Ti) .*
+                                     (1 .- S[I, :]) .+
+                                     (l.w[I, :, i] .* l.Cu[I, :, i] .* Ti) .* S[I, :] .-
+                                     (sgs[I, :] .* Cs[I, :] .+ sgn[I, :] .* Cn[I, :] .+ Ti) .*
+                                     lC[I, :] .+
+                                     ixs[I, :] .* Cs_plus[I, :] .* lC[1:(end - 2), :] .-
+                                     (1 .- ixs[I, :]) .* Cs_min[I, :] .* lC[3:end, :] .+
+                                     ixn[I, :] .* Cn_plus[I, :] .*
+                                     circshift(lC[I, :], (0, 1)) .-
+                                     (1 .- ixn[I, :]) .* Cn_min[I, :] .*
+                                     circshift(lC[I, :], (0, -1))
+                y_i = zeros(nxp, nyp)
+                @views y_i[I, :] .= lC[I, :] .+ alpha .* y_im[I, :] .+
+                                    (1 - alpha) .* y_ex[I, :]
+            end
             bo == :flux && (y_i[1, :] .= p.offshore_flux .* s.Cu0[1, :, i])
             bn == :flux && (y_i[end, :] .= p.onshore_flux .* s.Cu0[end, :, i])
             bo == :constant && (y_i[1, :] .= p.constant_offshore_flux ./ s.u[1, :, i])
@@ -189,17 +227,7 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
             end
             Ct_i = _linsolve!(cache, rhs)
             prevent_tiny_negatives!(Ct_i, p.max_error)
-            if minimum(Ct_i) < 0
-                neg = Ct_i .< 0
-                pos = .!neg
-                spos = sum(Ct_i[pos])
-                if spos != 0
-                    Ct_i[pos] .*= 1 + sum(Ct_i[neg]) / spos
-                else
-                    Ct_i[pos] .= 0
-                end
-                Ct_i[neg] .= 0
-            end
+            _rescale_negatives!(Ct_i)
             w_i = vec(w[:, :, i])
             pickup_i = (w_i .* Cu_i .- Ct_i) ./ p.T .* dt
             deficit = pickup_i .- mass_i
@@ -219,7 +247,10 @@ function solve_trunk(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta
         pickup[:, :, i] .= reshape(pickup_i, nxp, nyp)
     end
     any(1 .- sum(w; dims=3) .> p.max_error) && _count!(m, :supplylim)
-    return (; Ct, qs=Ct .* s.us, qn=Ct .* s.un, pickup, w, w_init, w_air, w_bed)
+    qs = Ct .* s.us
+    qn = Ct .* s.un
+    steady && return (; Ct, qs, qn, pickup, w, w_init, w_air, w_bed, q=hypot.(qs, qn))
+    return (; Ct, qs, qn, pickup, w, w_init, w_air, w_bed)
 end
 
 """
@@ -270,14 +301,18 @@ function solve_euler_forward(s::AeolisState, m::AeolisModel, dt::Real)
 end
 
 """
-    solve_pieter(s, m, dt, alpha, beta, linsolve)
+    solve_pieter(s, m, dt, alpha, beta, linsolve; steady=false)
 
 The finite-volume AeoLiS solver (`solve_pieter`): upwind fluxes on cell faces, the change of
 concentration solved for iteratively with erosion limited by the bed, and flux, constant,
 gradient or circular boundaries. At the first step (`t == 0`) only the weights are set.
+
+With `steady = true` it is AeoLiS's `solve_steadystatepieter` (`solver = steadystatepieter`,
+any scheme): the same face fluxes without the time derivative, so each step solves for the
+concentration in equilibrium with the current wind and bed; `alpha` is then ignored.
 """
 function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, beta::Real,
-                      linsolve)
+                      linsolve; steady::Bool=false)
     p = m.p
     l = m.prev
     nxp, nyp = m.nx + 1, m.ny + 1
@@ -287,8 +322,9 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
     Ts = p.T
     w_init, w_air, w_bed = compute_weights(s, m)
     if m.time == 0
-        return (; w=_initial_weights(s, m, w_init))
+        return (; w=steady ? _grain_dist_weights(m) : _initial_weights(s, m, w_init))
     end
+    steady && (alpha = 1.0)
     w = copy(w_init)
     bo, bn, bl = p.boundary_offshore, p.boundary_onshore, p.boundary_lateral
     for i in 1:nf
@@ -316,7 +352,7 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
         Ap1 = zeros(nxp, nyp)
         Amx = zeros(nxp, nyp)
         Am1 = zeros(nxp, nyp)
-        A0 .+= dsdn ./ dt
+        steady || (A0 .+= dsdn ./ dt)
         A0 .+= dsdn ./ Ts .* alpha
         F = ufs[2:(end - 1), :]
         G = ixfs[2:(end - 1), :]
@@ -413,7 +449,9 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
                                     (alpha .* C[:, end] .+ (1 - alpha) .* lC[:, end]) .+
                                     (1 .- ixfn[:, 1]) .*
                                     (alpha .* C[:, 1] .+ (1 - alpha) .* lC[:, 1])
-                Cxn[:, end] .= Cxn[:, 1]
+                # solve_steadystatepieter does not copy the face to the last lateral face,
+                # which keeps 0
+                steady || (Cxn[:, end] .= Cxn[:, 1])
             end
             D_i = dsdn ./ Ts .* (alpha .* C .+ (1 - alpha) .* lC)
             A_i = dsdn ./ Ts .* s.mass[:, :, 1, i] .+ D_i
@@ -421,7 +459,7 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
                                  (1 - alpha) .* l.w[:, :, i] .* l.Cu[:, :, i])
             E_i = min.(U_i, A_i)
             y = zeros(nxp, nyp)
-            y .-= dsdn ./ dt .* (C .- lC)
+            steady || (y .-= dsdn ./ dt .* (C .- lC))
             y .+= E_i .- D_i
             @views y[2:end, :] .+= dn[2:end, :] .* F .* Cxs[2:(end - 1), :]
             @views y[1:(end - 1), :] .-= dn[1:(end - 1), :] .* F .* Cxs[2:(end - 1), :]
@@ -431,7 +469,8 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
                 @views y[1, :] .+= dn[1, :] .* ufs[1, :] .* s.Cu0[1, :, i] .*
                                    p.offshore_flux
             elseif bo == :constant
-                y[1, :] .= 0
+                # solve_steadystatepieter puts the flux where solve_pieter puts 0
+                y[1, :] .= steady ? p.constant_offshore_flux : 0
             elseif bo == :gradient
                 @views y[1, :] .+= dn[2, :] .* ufs[2, :] .* Cxs[2, :]
             end
@@ -439,7 +478,7 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
                 @views y[end, :] .+= dn[end, :] .* ufs[end, :] .* s.Cu0[end, :, i] .*
                                      p.onshore_flux
             elseif bn == :constant
-                y[end, :] .= 0
+                y[end, :] .= steady ? p.constant_onshore_flux : 0
             elseif bn == :gradient
                 @views y[end, :] .-= dn[end - 1, :] .* ufs[end - 1, :] .* Cxs[end - 1, :]
             end
@@ -463,7 +502,11 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
             end
             Ct_i = vec(C) .+ _linsolve!(cache, rhs)
             prevent_tiny_negatives!(Ct_i, p.max_error)
-            Ct_i[Ct_i .< 0] .= 0
+            if steady
+                _rescale_negatives!(Ct_i)
+            else
+                Ct_i[Ct_i .< 0] .= 0
+            end
             w_i = vec(w[:, :, i])
             pickup_i = (w_i .* Cu_i .- Ct_i) ./ Ts .* dt
             deficit = pickup_i .- mass_i
@@ -485,6 +528,7 @@ function solve_pieter(s::AeolisState, m::AeolisModel, dt::Real, alpha::Real, bet
     any(1 .- sum(w; dims=3) .> p.max_error) && _count!(m, :supplylim)
     qs = Ct .* s.us
     qn = Ct .* s.un
+    steady && return (; Ct, qs, qn, pickup, w, w_init, w_air, w_bed)   # no q, as in AeoLiS
     return (; Ct, qs, qn, pickup, w, w_init, w_air, w_bed, q=hypot.(qs, qn))
 end
 
@@ -755,4 +799,199 @@ function _sweep_quadrants!(Ct, Cu, mass, pickup, dt, Ts, ds, dn, ufs, ufn, w, vi
         end
     end
     return Ct
+end
+
+# ---------------------------------------------------------------------------------------
+# The equilibrium concentration as a SciMLBase SteadyStateProblem (not part of AeoLiS).
+#
+# For each fraction, dCt/dt = A * Ct + b + (min(w Cu, Ct + mass T / dt) - Ct) / T, where
+# A * Ct + b is the net upwind flux through the cell faces per unit area (fluxes on faces as
+# in the pieter solver, with inflow concentrations at the boundaries in b), and the source
+# relaxes Ct towards w Cu over the adaptation time T, with erosion over the step limited to
+# the sediment in the top layer. The right-hand side is piecewise linear in Ct, so its
+# Jacobian, A minus 1/T on the diagonal where transport is not supply-limited, is exact.
+
+# Inflow concentration at a boundary face, from the flux (a fraction of saturation) or a
+# constant flux divided by the grain speed.
+function _inflow_concentration(kind, frac, constant, Cu0, u)
+    kind == :flux && return frac * Cu0
+    kind == :constant && return u > 0 ? constant / u : zero(u)
+    return zero(Cu0)
+end
+
+function _equilibrium_operator(s, m, i)
+    p = m.p
+    nxp, nyp = m.nx + 1, m.ny + 1
+    n = nxp * nyp
+    L(a, c) = a + (c - 1) * nxp
+    I = Int[]
+    J = Int[]
+    V = Float64[]
+    b = zeros(n)
+    for k in 1:n
+        push!(I, k)
+        push!(J, k)
+        push!(V, 0.0)      # every diagonal entry is stored, for the Jacobian
+    end
+    # flux F = v * C[up] through a face, gained by cell `to` and lost by cell `from`
+    function face!(from, to, v, len_from, len_to)
+        up = v >= 0 ? from : to
+        if to != 0
+            push!(I, to)
+            push!(J, up)
+            push!(V, len_to * v / s.dsdn[to])
+        end
+        if from != 0
+            push!(I, from)
+            push!(J, up)
+            push!(V, -len_from * v / s.dsdn[from])
+        end
+    end
+    # a boundary face of cell c; `sgn` is +1 when a positive velocity enters the cell
+    function edge!(c, sgn, v, len, kind, Cin)
+        vin = sgn * v
+        if kind == :gradient || vin < 0
+            push!(I, c)
+            push!(J, c)
+            push!(V, len * vin / s.dsdn[c])
+        else
+            b[c] += len * vin * Cin / s.dsdn[c]
+        end
+    end
+    bo, bn, bl = p.boundary_offshore, p.boundary_onshore, p.boundary_lateral
+    bo in (:flux, :constant, :gradient) ||
+        throw(UnsupportedOptionError(:boundary_offshore, bo,
+                                     "SciMLSteadyState supports flux, constant and gradient offshore boundaries"))
+    bn in (:flux, :constant, :gradient) ||
+        throw(UnsupportedOptionError(:boundary_onshore, bn,
+                                     "SciMLSteadyState supports flux, constant and gradient onshore boundaries"))
+    bl in (:circular, :flux, :gradient) ||
+        throw(UnsupportedOptionError(:boundary_lateral, bl,
+                                     "SciMLSteadyState supports circular, flux and gradient lateral boundaries"))
+    us = view(s.us, :, :, i)
+    un = view(s.un, :, :, i)
+    for c in 1:nyp
+        for a in 2:nxp
+            v = 0.5 * us[a - 1, c] + 0.5 * us[a, c]
+            face!(L(a - 1, c), L(a, c), v, s.dn[a - 1, c], s.dn[a, c])
+        end
+        edge!(L(1, c), 1, us[1, c], s.dn[1, c], bo,
+              _inflow_concentration(bo, p.offshore_flux, p.constant_offshore_flux,
+                                    s.Cu0[1, c, i], s.u[1, c, i]))
+        edge!(L(nxp, c), -1, us[nxp, c], s.dn[nxp, c], bn,
+              _inflow_concentration(bn, p.onshore_flux, p.constant_onshore_flux,
+                                    s.Cu0[nxp, c, i], s.u[nxp, c, i]))
+    end
+    if nyp > 1
+        for a in 1:nxp
+            for c in 2:nyp
+                v = 0.5 * un[a, c - 1] + 0.5 * un[a, c]
+                face!(L(a, c - 1), L(a, c), v, s.ds[a, c - 1], s.ds[a, c])
+            end
+            if bl == :circular
+                v = 0.5 * un[a, nyp] + 0.5 * un[a, 1]
+                face!(L(a, nyp), L(a, 1), v, s.ds[a, nyp], s.ds[a, 1])
+            else
+                edge!(L(a, 1), 1, un[a, 1], s.ds[a, 1], bl,
+                      _inflow_concentration(bl, p.lateral_flux, 0.0, s.Cu0[a, 1, i], 0.0))
+                edge!(L(a, nyp), -1, un[a, nyp], s.ds[a, nyp], bl,
+                      _inflow_concentration(bl, p.lateral_flux, 0.0, s.Cu0[a, nyp, i], 0.0))
+            end
+        end
+    end
+    A = SparseArrays.sparse(I, J, V, n, n)
+    return A, b
+end
+
+# Positions of the diagonal entries in the stored values of A.
+function _diagonal_positions(A)
+    n = size(A, 1)
+    d = Vector{Int}(undef, n)
+    rv = SparseArrays.rowvals(A)
+    for c in 1:n
+        r = SparseArrays.nzrange(A, c)
+        k = findfirst(==(c), view(rv, r))
+        d[c] = r[k]
+    end
+    return d
+end
+
+struct _EquilibriumRHS{M,V}
+    A::M
+    b::V
+    wCu::V
+    mlim::V
+    Ti::Float64
+    diag::Vector{Int}
+end
+
+function (f::_EquilibriumRHS)(du, u, _, _)
+    LinearAlgebra.mul!(du, f.A, u)
+    @inbounds for k in eachindex(du)
+        du[k] += f.b[k] + (min(f.wCu[k], u[k] + f.mlim[k]) - u[k]) * f.Ti
+    end
+    return nothing
+end
+
+# The Jacobian: A, less 1/T on the diagonal where the source is not limited by the bed.
+function _equilibrium_jacobian!(J, u, f::_EquilibriumRHS)
+    A = f.A
+    if J isa SparseArrays.SparseMatrixCSC && SparseArrays.getcolptr(J) == A.colptr &&
+       SparseArrays.rowvals(J) == A.rowval
+        nz = SparseArrays.nonzeros(J)
+        copyto!(nz, SparseArrays.nonzeros(A))
+        @inbounds for k in eachindex(u)
+            f.wCu[k] < u[k] + f.mlim[k] && (nz[f.diag[k]] -= f.Ti)
+        end
+    else
+        copyto!(J, A)
+        @inbounds for k in eachindex(u)
+            f.wCu[k] < u[k] + f.mlim[k] && (J[k, k] -= f.Ti)
+        end
+    end
+    return nothing
+end
+
+"""
+    solve_sciml_steady_state(s, m, dt, solver)
+
+The concentration in equilibrium with the current wind and bed, for each fraction, as a
+SciMLBase `SteadyStateProblem` solved with `solver.alg` (the [`SciMLSteadyState`](@ref)
+transport solver). Erosion over the step `dt` is limited by the sediment in the top layer.
+"""
+function solve_sciml_steady_state(s::AeolisState, m::AeolisModel, dt::Real, solver)
+    p = m.p
+    nxp, nyp = m.nx + 1, m.ny + 1
+    w_init, w_air, w_bed = compute_weights(s, m)
+    w = m.time == 0 ? _initial_weights(s, m, w_init) : copy(w_init)
+    Ct = copy(s.Ct)
+    pickup = zeros(size(s.pickup))
+    Ti = 1 / p.T
+    for i in 1:(m.nf)
+        _count!(m, :matrixsolve)
+        A, b = _equilibrium_operator(s, m, i)
+        Cu_i = vec(s.Cu[:, :, i])
+        wCu = vec(w[:, :, i]) .* Cu_i
+        mlim = vec(s.mass[:, :, 1, i]) .* (p.T / dt)
+        rhs = _EquilibriumRHS(A, b, wCu, mlim, Ti, _diagonal_positions(A))
+        jac = (J, u, _, _) -> _equilibrium_jacobian!(J, u, rhs)
+        fun = SciMLBase.ODEFunction{true}(rhs; jac, jac_prototype=copy(A))
+        u0 = max.(vec(s.Ct[:, :, i]), 0.0)
+        prob = SciMLBase.SteadyStateProblem(fun, u0)
+        sol = solve(prob, solver.alg; solver.kwargs...)
+        SciMLBase.successful_retcode(sol) ||
+            @warn "steady-state transport not converged" retcode = sol.retcode fraction = i time = m.time
+        C = max.(vec(sol.u), 0.0)
+        E = min.(wCu, C .+ mlim)
+        limited = wCu .> C .+ mlim
+        w_i = vec(w[:, :, i])
+        w_i[limited] .= (mlim[limited] .+ C[limited]) ./ Cu_i[limited]
+        w[:, :, i] .= reshape(w_i, nxp, nyp)
+        Ct[:, :, i] .= reshape(C, nxp, nyp)
+        pickup[:, :, i] .= reshape((E .- C) .* Ti .* dt, nxp, nyp)
+    end
+    any(1 .- sum(w; dims=3) .> p.max_error) && _count!(m, :supplylim)
+    qs = Ct .* s.us
+    qn = Ct .* s.un
+    return (; Ct, qs, qn, pickup, w, w_init, w_air, w_bed, q=hypot.(qs, qn))
 end

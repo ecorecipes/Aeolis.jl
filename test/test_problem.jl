@@ -101,10 +101,12 @@ end
     prob = AeolisProblem(p)
     ref = solve(prob)[:zb]
     for alg in (CrankNicolson(), EulerBackward(Pieter()), EulerBackward(SteadyState()),
+                CrankNicolson(SteadyState()), EulerBackward(SteadyStatePieter()),
                 EulerForward(Trunk()))
         s = solve(remake(prob; CFL=1.0), alg)
         @test s.retcode == ReturnCode.Success
         @test maximum(abs.(s[:zb][:, :, end] .- ref[:, :, end])) < 0.05
     end
-    @test_throws UnsupportedOptionError solve(prob, CrankNicolson(SteadyState()))
+    @test default_algorithm(remake_parameters(p; solver=:steadystatepieter)) isa
+          EulerBackward{SteadyStatePieter}
 end

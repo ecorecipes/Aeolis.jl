@@ -37,6 +37,7 @@ FFTW = "1"
 LinearAlgebra = "1"
 LinearSolve = "5"
 NCDatasets = "0.14"
+NonlinearSolveFirstOrder = "2"
 PrecompileTools = "1"
 Random = "1"
 RecipesBase = "1"
@@ -52,7 +53,8 @@ julia = "1.12"
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+NonlinearSolveFirstOrder = "5959db7a-ea39-4486-b5fe-2dd0bf03d60d"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "NCDatasets", "Test"]
+test = ["Aqua", "NCDatasets", "NonlinearSolveFirstOrder", "Test"]

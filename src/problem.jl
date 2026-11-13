@@ -5,7 +5,8 @@
     AbstractTransportSolver
 
 Supertype of the transport solvers used inside a scheme: [`Trunk`](@ref),
-[`Pieter`](@ref) and [`SteadyState`](@ref).
+[`Pieter`](@ref), [`SteadyState`](@ref), [`SteadyStatePieter`](@ref) and
+[`SciMLSteadyState`](@ref).
 """
 abstract type AbstractTransportSolver end
 
@@ -27,17 +28,71 @@ struct Pieter <: AbstractTransportSolver end
 """
     SteadyState()
 
-The steady-state AeoLiS transport solver, sweeping the grid upwind (`solver = steadystate`).
+The steady-state AeoLiS transport solver (`solver = steadystate`): the concentration in
+equilibrium with the current wind and bed at each step. With `EulerBackward` and
+`EulerForward` it sweeps the grid upwind; with `CrankNicolson` it solves the upwind matrix of
+[`Trunk`](@ref) without the time derivative, as AeoLiS does.
 """
 struct SteadyState <: AbstractTransportSolver end
+
+"""
+    SteadyStatePieter()
+
+The steady-state form of [`Pieter`](@ref) (`solver = steadystatepieter`): fluxes on cell
+faces without the time derivative, solved for the concentration in equilibrium with the
+current wind and bed at each step, under any scheme.
+
+As in AeoLiS, with circular lateral boundaries the flux through the last lateral face is left
+out of the right-hand side. With an alongshore component of the wind, the sediment picked up
+then falls well short of the net flux out of the domain (to a third of it on a two-dimensional
+test hill); otherwise the two agree to within a few percent. [`SciMLSteadyState`](@ref)
+balances them.
+"""
+struct SteadyStatePieter <: AbstractTransportSolver end
+
+"""
+    SciMLSteadyState(alg; kwargs...)
+
+A transport solver that is not part of AeoLiS: at each step, the concentration in the air
+in equilibrium with the current wind and bed is posed as a SciMLBase `SteadyStateProblem`
+and solved with `alg` and keyword arguments `kwargs` (for example `abstol`), one fraction at
+a time. `alg` is any SciML steady-state or nonlinear solver, such as `NewtonRaphson()` from
+NonlinearSolve.jl or `DynamicSS(Rodas5P())` from SteadyStateDiffEq.jl and OrdinaryDiffEq.jl;
+load the package that provides it.
+
+For each fraction the problem is
+`dCt/dt = A Ct + b + (min(w Cu, Ct + mass T / dt) - Ct) / T`, where `A Ct + b` is the net
+upwind flux through the cell faces per unit area (face velocities as in [`Pieter`](@ref),
+inflow concentrations at the boundaries in `b`), and the source relaxes `Ct` towards
+`w Cu` over the adaptation time `T` with erosion over the step `dt` limited to the
+sediment in the top layer. The problem carries its exact sparse Jacobian. The previous
+concentration is the initial guess.
+
+Boundaries: `flux` (inflow at `offshore_flux`, `onshore_flux` or `lateral_flux` times the
+saturated concentration on a flat bed `Cu0`), `constant` (inflow concentration
+`constant_offshore_flux` or `constant_onshore_flux` divided by the grain speed) and
+`gradient` (the face carries the boundary cell's concentration) across the shore;
+`circular`, `flux` and `gradient` laterally. Multiple fractions are solved independently,
+each limited by its own sediment in the top layer.
+"""
+struct SciMLSteadyState{A,K} <: AbstractTransportSolver
+    alg::A
+    kwargs::K
+end
+SciMLSteadyState(alg; kwargs...) = SciMLSteadyState(alg, NamedTuple(kwargs))
 
 _solver_symbol(::Trunk) = :trunk
 _solver_symbol(::Pieter) = :pieter
 _solver_symbol(::SteadyState) = :steadystate
+_solver_symbol(::SteadyStatePieter) = :steadystatepieter
+# what aeolis_step! receives: the AeoLiS solver's name, or the solver itself
+_solver_arg(s::AbstractTransportSolver) = _solver_symbol(s)
+_solver_arg(s::SciMLSteadyState) = s
 function _solver_from_symbol(s::Symbol)
     s == :trunk && return Trunk()
     s == :pieter && return Pieter()
     s == :steadystate && return SteadyState()
+    s == :steadystatepieter && return SteadyStatePieter()
     return throw(UnsupportedOptionError(:solver, s, "the $(s) solver is not ported"))
 end
 
@@ -425,7 +480,7 @@ function CommonSolve.step!(integ::AeolisIntegrator, n::Integer=1)
         integ.terminated && break
         dt = _next_step(integ)
         step = aeolis_step!(integ.u, integ.model, integ.t, dt, _scheme_symbol(alg),
-                            _solver_symbol(alg.solver), alg.linsolve)
+                            _solver_arg(alg.solver), alg.linsolve)
         if step === nothing
             integ.t += abs(dt)
             continue

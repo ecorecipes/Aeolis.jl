@@ -35,6 +35,7 @@ Aeolis.solve_trunk
 Aeolis.solve_euler_forward
 Aeolis.solve_pieter
 Aeolis.solve_steady_state
+Aeolis.solve_sciml_steady_state
 Aeolis.sweep!
 Aeolis.initialize_bed!
 Aeolis.mixtoplayer!

@@ -44,23 +44,35 @@ function _transport!(s, m, dt, scheme::Symbol, solver::Symbol, linsolve)
         solve_trunk(s, m, dt, alpha, 1.0, linsolve)
     elseif solver == :pieter
         solve_pieter(s, m, dt, alpha, 1.0, linsolve)
-    elseif solver == :steadystate && scheme != :crank_nicolson
+    elseif solver == :steadystate
+        # AeoLiS: the sweep with euler_forward and euler_backward, solve_steadystate with
+        # crank_nicolson
+        scheme == :crank_nicolson ? solve_trunk(s, m, dt, 1.0, 1.0, linsolve; steady=true) :
         solve_steady_state(s, m, dt)
+    elseif solver == :steadystatepieter
+        solve_pieter(s, m, dt, 1.0, 1.0, linsolve; steady=true)
     else
         throw(UnsupportedOptionError(:solver, solver,
-                                     "the $(solver) solver with $(scheme) is not ported; use trunk, pieter or steadystate (with euler_forward or euler_backward)"))
+                                     "use trunk, pieter, steadystate or steadystatepieter"))
     end
     return _apply_transport!(s, r)
+end
+
+# a transport solver passed as an object (SciMLSteadyState)
+function _transport!(s, m, dt, scheme::Symbol, solver, linsolve)
+    return _apply_transport!(s, solve_sciml_steady_state(s, m, dt, solver))
 end
 
 """
     aeolis_step!(s, m, t, dt, scheme, solver, linsolve)
 
 Advance the state `s` from time `t` by one AeoLiS update with requested step `dt` (`-1` for
-the configured step). Returns the time step used, or `nothing` when no update was made.
+the configured step). `solver` is an AeoLiS solver name (`:trunk`, `:pieter`, `:steadystate`,
+`:steadystatepieter`) or a [`SciMLSteadyState`](@ref). Returns the time step used, or
+`nothing` when no update was made.
 """
 function aeolis_step!(s::AeolisState, m::AeolisModel, t::Real, dt::Real, scheme::Symbol,
-                      solver::Symbol, linsolve)
+                      solver, linsolve)
     p = m.p
     m.time = t
     copyto_state!(m.prev, s)

@@ -5,6 +5,7 @@ Simon Frost
 - [A test problem](#a-test-problem)
 - [Schemes and solvers](#schemes-and-solvers)
 - [Linear solvers](#linear-solvers)
+- [Steady-state solvers](#steady-state-solvers)
 - [References](#references)
 
 ## Overview
@@ -15,9 +16,12 @@ AeoLiS default), `CrankNicolson`, or explicit Euler (`EulerForward`,
 with the time step limited by the CFL number). Inside a scheme the
 transport solver is `Trunk` (an upwind discretisation solved as a sparse
 linear system), `Pieter` (a finite-volume form with fluxes on cell
-faces) or `SteadyState` (an upwind sweep that finds the equilibrium with
-the current wind). The sparse systems are solved with LinearSolve.jl, so
-any of its sparse factorizations can be used.
+faces), or one of the steady-state solvers, which find the concentration
+in equilibrium with the current wind at each step: `SteadyState` and
+`SteadyStatePieter` from AeoLiS, and `SciMLSteadyState`, which poses the
+equilibrium as a SciML `SteadyStateProblem`. The sparse systems are
+solved with LinearSolve.jl, so any of its sparse factorizations can be
+used.
 
 ``` julia
 ENV["GKSwstype"] = "100"
@@ -117,5 +121,61 @@ end
     default                        max difference 0.0
     LinearSolve.KLUFactorization(true, true) max difference 0.0
     LinearSolve.UMFPACKFactorization{@NamedTuple{}}(true, true, NamedTuple()) max difference 1.1102230246251565e-16
+
+## Steady-state solvers
+
+AeoLiS has three steady-state forms. `SteadyState` sweeps the grid
+upwind under `EulerBackward` and `EulerForward`, but under
+`CrankNicolson` it solves the trunk solver’s matrix without the time
+derivative. `SteadyStatePieter` does the same with the pieter solver’s
+face fluxes, under any scheme.
+
+`SciMLSteadyState` is not part of AeoLiS. At each step, and for each
+fraction, it writes the equilibrium as a `SteadyStateProblem`: the net
+upwind flux through the cell faces plus a source that relaxes the
+concentration towards saturation, with erosion over the step limited to
+the sediment in the top layer. Any SciML steady-state or nonlinear
+solver can solve it; here `NewtonRaphson` from NonlinearSolve.jl. The
+source is piecewise linear in the concentration and the problem carries
+its exact sparse Jacobian, so Newton’s method converges in a few
+iterations.
+
+``` julia
+using NonlinearSolve
+steady = ["EulerBackward(SteadyState())" => EulerBackward(SteadyState()),
+          "CrankNicolson(SteadyState())" => CrankNicolson(SteadyState()),
+          "EulerBackward(SteadyStatePieter())" => EulerBackward(SteadyStatePieter()),
+          "EulerBackward(SciMLSteadyState(NewtonRaphson()))" => EulerBackward(SciMLSteadyState(NewtonRaphson()))]
+ssols = Dict(name => solve(prob, alg) for (name, alg) in steady)
+plt = plot(; xlabel="time (h)", ylabel="flux at x = 99 m (kg/m/s)", legend=:topleft)
+plot!(plt, sols["EulerBackward(Trunk())"].t ./ 3600,
+      transect(sols["EulerBackward(Trunk())"], :qs)[end - 1, 1, :]; lw=2, ls=:dash,
+      color=:black, label="EulerBackward(Trunk())")
+for (name, _) in steady
+    s = ssols[name]
+    plot!(plt, s.t ./ 3600, transect(s, :qs)[end - 1, 1, :]; lw=2, label=name)
+end
+plt
+```
+
+![](10_schemes_and_solvers_files/figure-commonmark/cell-8-output-1.svg)
+
+The bed level after six hours, against the time-dependent trunk solver:
+
+``` julia
+[(name, maximum(abs.(transect(ssols[name], :zb)[:, end] .- ref))) for (name, _) in steady]
+```
+
+    4-element Vector{Tuple{String, Float64}}:
+     ("EulerBackward(SteadyState())", 0.005272247071415048)
+     ("CrankNicolson(SteadyState())", 1.8761424147584194e-7)
+     ("EulerBackward(SteadyStatePieter())", 1.2569002748152869e-5)
+     ("EulerBackward(SciMLSteadyState(NewtonRaphson()))", 0.00040246448893843656)
+
+In `SciMLSteadyState` the sediment picked up over a step equals the net
+flux out of the domain, so the bed change balances transport exactly.
+AeoLiS’s `SteadyStatePieter` balances them only approximately, and with
+circular lateral boundaries and an alongshore wind it leaves out the
+flux through one lateral face.
 
 ## References

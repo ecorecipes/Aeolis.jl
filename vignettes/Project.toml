@@ -2,6 +2,7 @@
 Aeolis = "275b8ea7-c103-4ed2-bde0-0231911d138f"
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 Optimization = "7f7a1694-90dd-40f0-9382-eb1efda571ba"
 OptimizationOptimJL = "36348300-93cb-4f02-beb5-3c3902f8871e"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"

@@ -11,7 +11,8 @@ A model is an [`AeolisProblem`](@ref) built from [`AeolisParameters`](@ref) (or 
 configuration file, [`read_config`](@ref)) and solved with the SciML interface (`init`,
 `step!`, `solve`) by a scheme ([`EulerBackward`](@ref), [`CrankNicolson`](@ref),
 [`EulerForward`](@ref)) and a transport solver ([`Trunk`](@ref), [`Pieter`](@ref),
-[`SteadyState`](@ref)). Loading NCDatasets enables [`write_netcdf`](@ref).
+[`SteadyState`](@ref), [`SteadyStatePieter`](@ref), or [`SciMLSteadyState`](@ref) with a
+SciML steady-state solver). Loading NCDatasets enables [`write_netcdf`](@ref).
 """
 module Aeolis
 
@@ -68,7 +69,8 @@ export MarramTraits, marram_traits, marram_info, MarramCell, marram_rates, marra
 export AeolisProblem, AeolisIntegrator, AeolisSolution, transect, statistic
 export AbstractAeolisAlgorithm, EulerBackward, CrankNicolson, EulerForward,
        default_algorithm
-export AbstractTransportSolver, Trunk, Pieter, SteadyState
+export AbstractTransportSolver, Trunk, Pieter, SteadyState, SteadyStatePieter,
+       SciMLSteadyState
 export read_config, write_config, run_config, write_netcdf, load_array
 export save_restart
 export init, solve, solve!, step!, remake, reinit!, terminate!, u_modified!, add_tstop!
