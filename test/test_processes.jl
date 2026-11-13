@@ -31,3 +31,30 @@
     # bed mass from the grain size distribution
     @test s.mass[1, 1, 1, 1] ≈ p.rhog * (1 - p.porosity) * p.layer_thickness
 end
+
+@testset "spectral shear with a spatially varying z0" begin
+    @test Aeolis._effective_z0(0.001) === 0.001
+    @test Aeolis._effective_z0(fill(2e-5, 3, 4)) === 2e-5
+    @test Aeolis._effective_z0([1e-5 NaN; 1e-3 0.0]) ≈ 1e-4
+    @test_throws ConfigurationError Aeolis._effective_z0([0.0 NaN])
+    # a hill with two fractions: the adaptive roughness is uniform at first, so the first
+    # step matches the initial mean grain size (AeoLiS raises a ValueError for the grid);
+    # in the second step (AeoLiS steps while t <= tstop) the bed has sorted and the
+    # undisturbed shear velocity uses the new z0
+    x, y = 0.0:1.0:40.0, 0.0:1.0:30.0
+    X = [xi for xi in x, _ in y]
+    Y = [yi for _ in x, yi in y]
+    Z = @. 3.0 * exp(-((X - 15)^2 / 50 + (Y - 15)^2 / 70))
+    hill(meth) = AeolisParameters(; xgrid_file=X, ygrid_file=Y, bed_file=Z,
+                                  wind_file=[0.0 13.0 255.0; 1e6 13.0 255.0], tstop=600.0,
+                                  dt=600.0, output_times=600.0, process_shear=true, L=50.0,
+                                  l=1.0, buffer_width=10.0, grain_size=[0.0002, 0.0004],
+                                  grain_dist=[0.5, 0.5], method_roughness=meth)
+    adaptive = solve(AeolisProblem(hill(:mean_grainsize_adaptive)))
+    initial = solve(AeolisProblem(hill(:mean_grainsize_initial)))
+    @test adaptive.retcode == ReturnCode.Success
+    @test adaptive[:zb][:, :, 1:2] ≈ initial[:zb][:, :, 1:2] rtol = 1e-10
+    @test !(adaptive[:zb][:, :, 3] ≈ initial[:zb][:, :, 3])
+    integ = init(AeolisProblem(hill(:mean_grainsize_adaptive)))
+    @test integ.model.shear.z0 ≈ (0.0002 + 0.0004) / 2 / 30
+end

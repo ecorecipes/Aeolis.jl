@@ -36,7 +36,7 @@ A beach with a varying wind, so that the concentration is not always in
 equilibrium:
 
 ``` julia
-x = collect(0.0:1.0:100.0)
+x = collect(0.0:2.0:100.0)
 t = 0.0:600.0:86400.0
 wind = hcat(t, 8 .+ 6 .* sin.(t ./ 3000.0) .^ 2, fill(270.0, length(t)))
 p = AeolisParameters(; xgrid_file=x, bed_file=fill(1.0, length(x)), wind_file=wind,
@@ -61,7 +61,7 @@ algs = ["EulerBackward(Trunk())" => EulerBackward(Trunk()),
         "EulerBackward(Pieter())" => EulerBackward(Pieter()),
         "EulerBackward(SteadyState())" => EulerBackward(SteadyState())]
 sols = Dict(name => solve(prob, alg) for (name, alg) in algs)
-plt = plot(; xlabel="time (h)", ylabel="flux at x = 99 m (kg/m/s)", legend=:topleft)
+plt = plot(; xlabel="time (h)", ylabel="flux at x = 98 m (kg/m/s)", legend=:topleft)
 for (name, _) in algs
     s = sols[name]
     plot!(plt, s.t ./ 3600, transect(s, :qs)[end - 1, 1, :]; lw=2, label=name)
@@ -83,7 +83,7 @@ statistics count the time steps and the matrix solves:
     5-element Vector{Tuple{String, Int64, Int64}}:
      ("EulerBackward(Trunk())", 73, 73)
      ("CrankNicolson(Trunk())", 73, 73)
-     ("EulerForward(Trunk())", 232179, 0)
+     ("EulerForward(Trunk())", 116090, 0)
      ("EulerBackward(Pieter())", 73, 72)
      ("EulerBackward(SteadyState())", 73, 0)
 
@@ -98,8 +98,8 @@ ref = transect(sols["EulerBackward(Trunk())"], :zb)[:, end]
 
     5-element Vector{Tuple{String, Float64}}:
      ("EulerBackward(Trunk())", 0.0)
-     ("CrankNicolson(Trunk())", 1.3388266431046958e-6)
-     ("EulerForward(Trunk())", 0.0006005299166618183)
+     ("CrankNicolson(Trunk())", 1.137333824896558e-6)
+     ("EulerForward(Trunk())", 0.0009280507582671849)
      ("EulerBackward(Pieter())", 1.2569002748152869e-5)
      ("EulerBackward(SteadyState())", 0.005272247071415048)
 
@@ -120,7 +120,7 @@ end
 
     default                        max difference 0.0
     LinearSolve.KLUFactorization(true, true) max difference 0.0
-    LinearSolve.UMFPACKFactorization{@NamedTuple{}}(true, true, NamedTuple()) max difference 1.1102230246251565e-16
+    LinearSolve.UMFPACKFactorization{@NamedTuple{}}(true, true, NamedTuple()) max difference 0.0
 
 ## Steady-state solvers
 
@@ -147,7 +147,7 @@ steady = ["EulerBackward(SteadyState())" => EulerBackward(SteadyState()),
           "EulerBackward(SteadyStatePieter())" => EulerBackward(SteadyStatePieter()),
           "EulerBackward(SciMLSteadyState(NewtonRaphson()))" => EulerBackward(SciMLSteadyState(NewtonRaphson()))]
 ssols = Dict(name => solve(prob, alg) for (name, alg) in steady)
-plt = plot(; xlabel="time (h)", ylabel="flux at x = 99 m (kg/m/s)", legend=:topleft)
+plt = plot(; xlabel="time (h)", ylabel="flux at x = 98 m (kg/m/s)", legend=:topleft)
 plot!(plt, sols["EulerBackward(Trunk())"].t ./ 3600,
       transect(sols["EulerBackward(Trunk())"], :qs)[end - 1, 1, :]; lw=2, ls=:dash,
       color=:black, label="EulerBackward(Trunk())")
@@ -168,9 +168,9 @@ The bed level after six hours, against the time-dependent trunk solver:
 
     4-element Vector{Tuple{String, Float64}}:
      ("EulerBackward(SteadyState())", 0.005272247071415048)
-     ("CrankNicolson(SteadyState())", 1.8761424147584194e-7)
+     ("CrankNicolson(SteadyState())", 1.8742286556072685e-7)
      ("EulerBackward(SteadyStatePieter())", 1.2569002748152869e-5)
-     ("EulerBackward(SciMLSteadyState(NewtonRaphson()))", 0.00040246448893843656)
+     ("EulerBackward(SciMLSteadyState(NewtonRaphson()))", 0.0007467256756035212)
 
 In `SciMLSteadyState` the sediment picked up over a step equals the net
 flux out of the domain, so the bed change balances transport exactly.

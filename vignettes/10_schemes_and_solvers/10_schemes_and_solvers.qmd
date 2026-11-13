@@ -36,7 +36,7 @@ using Plots
 A beach with a varying wind, so that the concentration is not always in equilibrium:
 
 ```{julia}
-x = collect(0.0:1.0:100.0)
+x = collect(0.0:2.0:100.0)
 t = 0.0:600.0:86400.0
 wind = hcat(t, 8 .+ 6 .* sin.(t ./ 3000.0) .^ 2, fill(270.0, length(t)))
 p = AeolisParameters(; xgrid_file=x, bed_file=fill(1.0, length(x)), wind_file=wind,
@@ -54,7 +54,7 @@ algs = ["EulerBackward(Trunk())" => EulerBackward(Trunk()),
         "EulerBackward(Pieter())" => EulerBackward(Pieter()),
         "EulerBackward(SteadyState())" => EulerBackward(SteadyState())]
 sols = Dict(name => solve(prob, alg) for (name, alg) in algs)
-plt = plot(; xlabel="time (h)", ylabel="flux at x = 99 m (kg/m/s)", legend=:topleft)
+plt = plot(; xlabel="time (h)", ylabel="flux at x = 98 m (kg/m/s)", legend=:topleft)
 for (name, _) in algs
     s = sols[name]
     plot!(plt, s.t ./ 3600, transect(s, :qs)[end - 1, 1, :]; lw=2, label=name)
@@ -117,7 +117,7 @@ steady = ["EulerBackward(SteadyState())" => EulerBackward(SteadyState()),
           "EulerBackward(SteadyStatePieter())" => EulerBackward(SteadyStatePieter()),
           "EulerBackward(SciMLSteadyState(NewtonRaphson()))" => EulerBackward(SciMLSteadyState(NewtonRaphson()))]
 ssols = Dict(name => solve(prob, alg) for (name, alg) in steady)
-plt = plot(; xlabel="time (h)", ylabel="flux at x = 99 m (kg/m/s)", legend=:topleft)
+plt = plot(; xlabel="time (h)", ylabel="flux at x = 98 m (kg/m/s)", legend=:topleft)
 plot!(plt, sols["EulerBackward(Trunk())"].t ./ 3600,
       transect(sols["EulerBackward(Trunk())"], :qs)[end - 1, 1, :]; lw=2, ls=:dash,
       color=:black, label="EulerBackward(Trunk())")

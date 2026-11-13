@@ -9,18 +9,38 @@
 The settings of the spectral shear computation: computational cell sizes, the dune length
 scale `L`, the inner layer height `l`, the roughness length `z0` (fixed at its initial value,
 as in AeoLiS) and the width of the buffer around the rotated grid.
+
+The perturbation of Weng et al. (1991) assumes a uniform roughness. When `z0` is a grid (an
+adaptive `method_roughness`), the logarithmic mean of its positive values is used,
+`exp(mean(log(z0)))`, since `z0` enters the solution through `log(l / z0)`. AeoLiS has no
+working form for this case.
 """
 mutable struct WindShear
     dx::Float64
     dy::Float64
     L::Float64
     l::Float64
-    z0::Any
+    z0::Float64
     buffer_width::Float64
     x0::Float64
     y0::Float64
 end
-WindShear(dx, dy, L, l, z0, bw) = WindShear(dx, dy, L, l, z0, bw, 0.0, 0.0)
+WindShear(dx, dy, L, l, z0, bw) = WindShear(dx, dy, L, l, _effective_z0(z0), bw, 0.0, 0.0)
+
+# AeoLiS interpolates a grid of z0 to the computational grid and then indexes it with the
+# mask of Fourier modes (`z0new[valid]`), mixing physical and wavenumber space; numpy fails
+# to broadcast the result against the inner-layer height, so a spatially varying z0 raises
+# a ValueError there. Here the grid is replaced by its logarithmic mean over the cells where
+# it is positive and finite (a uniform grid gives its value exactly).
+function _effective_z0(z0)
+    z0 isa Real && return Float64(z0)
+    v = [Float64(z) for z in z0 if isfinite(z) && z > 0]
+    isempty(v) &&
+        throw(ConfigurationError("the roughness length z0 is nowhere positive; the " *
+                                 "spectral shear (method_shear = :fft) needs a positive z0"))
+    allequal(v) && return v[1]
+    return exp(mean(log, v))
+end
 
 # The computational grid (AeoLiS `set_computational_grid`): a box around the input grid,
 # aligned with the wind, plus the buffer.
@@ -172,8 +192,6 @@ function _shear_perturbation(sh::WindShear, z::AbstractMatrix, u0::Real)
         hs[k] *= f1 * f2
     end
     z0 = sh.z0
-    z0 isa AbstractArray && throw(UnsupportedOptionError(:method_roughness, :adaptive,
-                                                         "spatially varying z0 with spectral shear is not ported"))
     L = sh.L / 4.0
     l = sh.l
     for _ in 1:5

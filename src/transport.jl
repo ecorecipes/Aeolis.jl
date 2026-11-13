@@ -36,6 +36,10 @@ function grainspeed_duran(s::AeolisState, m::AeolisModel)
     lv = (v^2 / (p.Aa^2 * g * (srho - 1)))^(1 / 3)
     z1 = 35.0 * lv
     A, B = 0.95, 5.12
+    full = p.method_grainspeed == :duran_full
+    ua = full ? zeros(ComplexF64, size(z)) : nothing
+    ve = full ? zeros(ComplexF64, size(z)) : nothing
+    dh = full ? zeros(ComplexF64, size(z)) : nothing
     for q in 1:nf
         z0 = d[q] / 20.0
         alpha = 0.17 * d[q] / lv
@@ -65,15 +69,22 @@ function grainspeed_duran(s::AeolisState, m::AeolisModel)
                   (sqrt(2 * alpha) * uf / Ax) * dhs
             una = (ueff - uf / (sqrt(2.0 * alpha) * Ax)) * etn -
                   (sqrt(2 * alpha) * uf / Ax) * dhn
-            if p.method_grainspeed == :duran
+            if full # solved below for the whole grid at once
+                ua[i, j] = complex(usa, una)
+                ve[i, j] = complex(ueff * ets, ueff * etn)
+                dh[i, j] = complex(dhs, dhn)
+            else
                 us[i, j, q], un[i, j, q] = usa, una
                 u[i, j, q] = hypot(usa, una)
-            else # :duran_full, Newton iterations on the grain momentum balance
-                ui = _duran_full(complex(usa, una), complex(ueff * ets, ueff * etn), uf,
-                                 alpha, complex(dhs, dhn))
-                us[i, j, q], un[i, j, q] = real(ui), imag(ui)
-                u[i, j, q] = abs(ui)
             end
+        end
+        if full # the grain momentum balance, by secant iterations
+            ui = _duran_full(ua, ve, uf, alpha, dh)
+            us[:, :, q] .= real.(ui)
+            un[:, :, q] .= imag.(ui)
+            u[:, :, q] .= abs.(ui)
+        end
+        for j in axes(z, 2), i in axes(z, 1)
             usST[i, j, q] = us[i, j, q]
             unST[i, j, q] = un[i, j, q]
             if s.uth[i, j, q] > s.ustar[i, j]
@@ -85,21 +96,56 @@ function grainspeed_duran(s::AeolisState, m::AeolisModel)
     return u0, us, un, u, usST, unST
 end
 
-# scipy.optimize.newton with a secant method (no derivative), maxiter 20, tol 0.05
-function _duran_full(u0::Complex, veff::Complex, uf, alpha, dh::Complex)
-    f(ui) = (veff - ui) * abs(veff - ui) / uf^2 - ui / (2 * alpha * abs(ui)) - dh
-    p0 = u0
-    p1 = u0 * (1 + 1e-4) + (real(u0) >= 0 ? 1e-4 : -1e-4)
-    q0, q1 = f(p0), f(p1)
-    abs(q1) < abs(q0) && ((p0, p1, q0, q1) = (p1, p0, q1, q0))
-    for _ in 1:20
-        q1 == q0 && return (p1 + p0) / 2
-        pn = p1 - q1 * (p1 - p0) / (q1 - q0)
-        abs(pn - p1) < 0.05 && return pn
-        p0, q0 = p1, q1
-        p1, q1 = pn, f(pn)
+# Duran et al.'s full grain momentum balance (eq. 1.61), solved as AeoLiS does: by
+# scipy.optimize.newton without a derivative, maxiter 20, tol 0.05. AeoLiS passes the whole
+# grid, so scipy takes its vectorised secant path (`_array_newton`), which differs from the
+# scalar one: the first step is eps^0.33 (sign by numpy's lexicographic complex order), there
+# is no swap of the starting points, and every cell keeps being updated until all cells
+# with a nonzero difference have converged. When the loop runs out, the result is the
+# second-to-last iterate. scipy warns when some cells have not converged and raises when
+# none has; both are reported here as a warning.
+function _duran_full(u0::AbstractMatrix{<:Complex}, veff::AbstractMatrix{<:Complex}, uf,
+                     alpha, dh::AbstractMatrix{<:Complex}; maxiter::Int=20, tol=0.05)
+    f(ui, k) = (veff[k] - ui) * abs(veff[k] - ui) / uf^2 - ui / (2 * alpha * abs(ui)) -
+               dh[k]
+    ge0(z) = real(z) > 0 || (real(z) == 0 && imag(z) >= 0)
+    n = length(u0)
+    dx = eps(Float64)^0.33
+    pv = collect(vec(u0))
+    p1 = [pk * (1 + dx) + (ge0(pk) ? dx : -dx) for pk in pv]
+    q0 = [f(pv[k], k) for k in 1:n]
+    q1 = [f(p1[k], k) for k in 1:n]
+    failures = trues(n)
+    active = trues(n)
+    nz = trues(n)
+    for _ in 1:maxiter
+        nz .= q1 .!= q0
+        if !any(nz)
+            pv .= (p1 .+ pv) ./ 2
+            break
+        end
+        for k in 1:n
+            if nz[k]
+                dp = q1[k] * (p1[k] - pv[k]) / (q1[k] - q0[k])
+                pv[k] = p1[k] - dp
+                failures[k] = abs(dp) >= tol
+            elseif active[k]
+                pv[k] = (p1[k] + pv[k]) / 2
+            end
+        end
+        active .&= nz
+        any(k -> nz[k] && failures[k], 1:n) || break
+        p1, pv = pv, p1
+        q0, q1 = q1, q0
+        for k in 1:n
+            q1[k] = f(p1[k], k)
+        end
     end
-    return p1
+    if !any(.!nz .& failures) && any(failures)
+        @warn "duran_full grain speed: $(count(failures)) of $n cells did not converge " *
+              "after $maxiter secant iterations"
+    end
+    return reshape(pv, size(u0))
 end
 
 """
