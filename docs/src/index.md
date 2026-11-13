@@ -53,6 +53,23 @@ sources, are in [`vignettes/`](https://github.com/ecorecipes/Aeolis.jl/tree/main
 | Vegetation growth | AeoLiS, or [Duran2013](@cite) |
 | Marram grass ([Marram grass](api_marram.md)) | [Nolet2018](@cite), [Reijers2021](@cite), [Homberger2026](@cite), [vanderPutten1993](@cite) and others |
 
+## Performance
+
+Two-dimensional runs factorize a sparse matrix at every step. LinearSolve's default factorization
+for these matrices does much of its work on small dense blocks through BLAS, and Julia's OpenBLAS
+uses several threads by default. On blocks this small the threads cost more than they save: a
+two-dimensional run can take more than twice as long, and use many times the CPU, as with a single
+BLAS thread. For two-dimensional runs, set one BLAS thread before solving,
+
+```julia
+using LinearAlgebra
+BLAS.set_num_threads(1)
+```
+
+or start Julia with `OPENBLAS_NUM_THREADS=1` in the environment. On the two-dimensional test
+cases, one thread gives bit-identical results. The setting applies to the whole Julia session, so
+code that does large dense linear algebra in the same session may want it restored afterwards.
+
 ## Array layout
 
 Spatial arrays are `(nx+1, ny+1)`, with layers and fractions after them: x is the first
